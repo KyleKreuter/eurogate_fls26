@@ -60,11 +60,14 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 from baseline import (  # noqa: E402
+    HARD_CUTOFF_TS,
+    OUTPUT_SUFFIX,
     PROJECT_ROOT,
     REEFER_CSV,
     SUBMISSIONS_DIR,
     TARGET_COL,
     TARGET_CSV,
+    extend_post_cutoff_with_mirror,
     load_hourly_total,
 )
 
@@ -74,7 +77,7 @@ from catboost import CatBoostRegressor  # noqa: E402
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
-CATBOOST_OUT = SUBMISSIONS_DIR / "catboost.csv"
+CATBOOST_OUT = SUBMISSIONS_DIR / f"catboost{OUTPUT_SUFFIX}.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -210,8 +213,25 @@ P90_SEEDS: list[int] = [42]
 # End-to-End Pipeline
 # ---------------------------------------------------------------------------
 def main() -> None:
-    # 1) Rohdaten (Stunden-Totale) laden
+    # 1) Rohdaten (Stunden-Totale) laden -- harter Leakage-Cutoff via
+    # load_hourly_total Default (HARD_CUTOFF_TS).
     hourly = load_hourly_total(REEFER_CSV)
+
+    # 1b) Target-Fenster EINMAL vorab lesen, um die Mirror-Year-Extension
+    # korrekt aufzuspannen.
+    targets = pd.read_csv(TARGET_CSV)
+    targets["ts"] = pd.to_datetime(targets["timestamp_utc"], utc=True)
+    target_start = targets["ts"].min()
+    target_end = targets["ts"].max()
+
+    # 1c) Mirror-Year-Extension: fuellt die Stunden zwischen HARD_CUTOFF_TS
+    # und target_end aus den Mirror-Werten (364 Tage frueher). Damit bleiben
+    # lag_24h / lag_168h fuer alle Target-Stunden berechenbar, ohne dass
+    # echte Post-Cutoff-Werte aus reefer_release.csv einfliessen.
+    hourly = extend_post_cutoff_with_mirror(
+        hourly, post_range_end=target_end, cutoff=HARD_CUTOFF_TS
+    )
+
     print(
         f"[cat] Zeitbereich: {hourly['ts'].min()} -> {hourly['ts'].max()}, "
         f"{len(hourly)} Stunden"
@@ -224,12 +244,6 @@ def main() -> None:
     # 2) Features bauen
     feat = add_features(hourly)
     feat = feat.dropna(subset=FEATURES).reset_index(drop=True)
-
-    # 3) Target-Fenster
-    targets = pd.read_csv(TARGET_CSV)
-    targets["ts"] = pd.to_datetime(targets["timestamp_utc"], utc=True)
-    target_start = targets["ts"].min()
-    target_end = targets["ts"].max()
     print(
         f"[cat] Target-Fenster: {target_start} -> {target_end} "
         f"({len(targets)} Stunden)"

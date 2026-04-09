@@ -32,11 +32,14 @@ if str(_HERE) not in _sys.path:
 from weather_external import OPEN_METEO_VARIABLES, load_cth_weather  # noqa: E402
 
 from baseline import (  # noqa: E402
+    HARD_CUTOFF_TS,
+    OUTPUT_SUFFIX,
     PROJECT_ROOT,
     REEFER_CSV,
     SUBMISSIONS_DIR,
     TARGET_COL,
     TARGET_CSV,
+    extend_post_cutoff_with_mirror,
 )
 
 from sklearn.ensemble import RandomForestRegressor  # noqa: E402
@@ -45,7 +48,7 @@ from sklearn.ensemble import RandomForestRegressor  # noqa: E402
 # ---------------------------------------------------------------------------
 # Konfiguration
 # ---------------------------------------------------------------------------
-RF_RICHFEAT_OUT = SUBMISSIONS_DIR / "rf_richfeat.csv"
+RF_RICHFEAT_OUT = SUBMISSIONS_DIR / f"rf_richfeat{OUTPUT_SUFFIX}.csv"
 
 # Deutsche Feiertage / Besonderheiten im Trainings- und Targetfenster:
 #   Neujahr 01.01., Heilige Drei Koenige 06.01., Weihnachten 24.-26.12.,
@@ -61,6 +64,20 @@ HOLIDAY_MONTH_DAYS: set[tuple[int, int]] = {
 
 # Nur-Lag-Features auf power_kw (alle >= 24h, regelkonform)
 POWER_LAGS_H: list[int] = [24, 48, 72, 168]
+
+# Rolling-Mean-Fenster auf power_kw. Alle Rolling-Means werden um 24h
+# verzoegert (shift(24)), damit sie regelkonform bleiben.
+#
+# DEFAULT: DEAKTIVIERT (USE_ROLLING_MEANS=False). Eine empirische
+# Evaluation am 2026-04-10 hat gezeigt, dass die Rolling-Means (vor allem
+# das 720h-Fenster) dem Level-RF "Dezember-Memory" geben und damit den
+# Januar-Feiertags-Drop ueberlagern. Ergebnis: mae_all leicht besser,
+# aber mae_peak brutal schlechter, combined Score steigt.
+#
+# Der Code ist als Reserve drin und kann fuer Zielfenster ohne starken
+# saisonalen Shift zum Training wieder aktiviert werden.
+USE_ROLLING_MEANS: bool = False
+ROLLING_WINDOWS_H: list[int] = [24, 168, 720]
 
 # Nur-Lag-Features auf Aggregaten (24h-Shift, damit 24h-ahead regelkonform)
 AGG_LAG_H: int = 24
@@ -79,13 +96,26 @@ SEASONAL_TRAIN_MONTHS: set[int] = {1, 2, 3, 11, 12}
 # ---------------------------------------------------------------------------
 # 1) Daten laden und stuendlich aggregieren
 # ---------------------------------------------------------------------------
-def load_hourly_richfeat(csv_path: Path) -> pd.DataFrame:
+def load_hourly_richfeat(
+    csv_path: Path,
+    cutoff: pd.Timestamp | None = None,
+) -> pd.DataFrame:
     """Liest reefer_release.csv und bildet pro Stunde eine Vielzahl Aggregate.
 
     Rueckgabe-DataFrame hat Spalte 'ts' + power_kw + alle stuendlichen
     Aggregat-Features. Die Zeitreihe ist lueckenlos 1h auf vollem Range.
+
+    Parameters
+    ----------
+    cutoff : Optional UTC-Timestamp. None -> Default HARD_CUTOFF_TS. Alle
+        Reefer-Rohdaten nach diesem Zeitpunkt werden sofort beim Read
+        verworfen (Leakage-Schutz).
     """
-    print(f"[load] Lese {csv_path.name} (kann 30-60s dauern, ~840 MB) ...")
+    effective_cutoff = HARD_CUTOFF_TS if cutoff is None else cutoff
+    print(
+        f"[load] Lese {csv_path.name} (kann 30-60s dauern, ~840 MB, "
+        f"cutoff={effective_cutoff}) ..."
+    )
     usecols = [
         "container_visit_uuid",
         "customer_uuid",
@@ -109,6 +139,16 @@ def load_hourly_richfeat(csv_path: Path) -> pd.DataFrame:
     print(f"[load] {len(df):,} Zeilen geladen, baue stuendliche Aggregate ...")
 
     df["EventTime"] = pd.to_datetime(df["EventTime"], utc=True)
+
+    if effective_cutoff is not None:
+        before = len(df)
+        df = df.loc[df["EventTime"] <= effective_cutoff]
+        dropped = before - len(df)
+        if dropped:
+            print(
+                f"[load] Leakage-Schutz: {dropped:,} Reefer-Zeilen nach "
+                f"{effective_cutoff} verworfen"
+            )
 
     # Normalisierung Hardware-Typ in grobe Familien
     ht = df["HardwareType"].astype(str)
@@ -245,6 +285,32 @@ def add_power_lags(df: pd.DataFrame, lags: list[int]) -> pd.DataFrame:
     for h in lags:
         out[f"lag_{h}h"] = out[TARGET_COL].shift(h)
     return out
+
+
+def add_power_rolling_means(
+    df: pd.DataFrame, windows: list[int]
+) -> tuple[pd.DataFrame, list[str]]:
+    """Rolling-Mean-Features auf power_kw, regelkonform um 24h verzoegert.
+
+    Fuer jedes Fenster w in `windows` wird eine Spalte
+    `power_rolling_{w}h_lag24h` angelegt, die den rollenden Mittelwert der
+    letzten w Stunden von power_kw enthaelt, anschliessend um 24h verschoben.
+    Dadurch bleibt die 24h-ahead-Regel erhalten: zum Target-Zeitpunkt t greift
+    das Feature nur auf power_kw(s) mit s <= t-24h zu.
+
+    Die Rolling-Means ergaenzen die Punkt-Lags (lag_24h, lag_168h, ...) mit
+    geglaetteter Level- und Trend-Information. Tree-Modelle lernen daraus oft
+    besser den aktuellen "Regime"-Level (z.B. Winter vs. Sommer) als aus
+    einzelnen Lag-Snapshots.
+    """
+    out = df.copy()
+    new_cols: list[str] = []
+    for w in windows:
+        col = f"power_rolling_{w}h_lag24h"
+        rolled = out[TARGET_COL].rolling(window=w, min_periods=1).mean()
+        out[col] = rolled.shift(24)
+        new_cols.append(col)
+    return out, new_cols
 
 
 def add_agg_lags(
@@ -442,6 +508,18 @@ def main() -> None:
     # --- Daten laden ---
     hourly = load_hourly_richfeat(REEFER_CSV)
 
+    # --- Leakage-Schutz: hourly reicht nur bis HARD_CUTOFF_TS. Erweitere
+    # per Mirror-Year bis zum Ende des Target-Fensters, damit lag_24h /
+    # lag_168h / agg_lag24h berechenbar bleiben, ohne jemals echte
+    # Post-Cutoff-Werte zu nutzen. ---
+    _targets_probe = pd.read_csv(TARGET_CSV)
+    _targets_probe["ts"] = pd.to_datetime(_targets_probe["timestamp_utc"], utc=True)
+    hourly = extend_post_cutoff_with_mirror(
+        hourly,
+        post_range_end=_targets_probe["ts"].max(),
+        cutoff=HARD_CUTOFF_TS,
+    )
+
     # --- Agg-Cols identifizieren (alle ausser ts und power_kw) ---
     agg_cols = [c for c in hourly.columns if c not in ("ts", TARGET_COL)]
     print(f"[feat] {len(agg_cols)} Aggregat-Spalten werden um {AGG_LAG_H}h verzoegert")
@@ -455,6 +533,17 @@ def main() -> None:
     # --- Power-Lags ---
     feat = add_power_lags(feat, POWER_LAGS_H)
     power_lag_cols = [f"lag_{h}h" for h in POWER_LAGS_H]
+
+    # --- Rolling-Mean-Features (default deaktiviert, siehe USE_ROLLING_MEANS) ---
+    if USE_ROLLING_MEANS:
+        feat, rolling_cols = add_power_rolling_means(feat, ROLLING_WINDOWS_H)
+        print(
+            f"[feat] Rolling-Mean-Features hinzugefuegt: {rolling_cols} "
+            f"(alle +24h verschoben)"
+        )
+    else:
+        rolling_cols = []
+        print("[feat] Rolling-Mean-Features: deaktiviert (USE_ROLLING_MEANS=False)")
 
     # --- Mirror-Year-Synthesis (power_lags + agg_lags) ---
     feat = synthesize_mirror_lags(feat, lag_cols=power_lag_cols + agg_lag_cols)
@@ -490,7 +579,12 @@ def main() -> None:
 
     # --- Finale Feature-Liste ---
     feature_list = (
-        time_cols + power_lag_cols + agg_lag_cols + weather_cols + interaction_cols
+        time_cols
+        + power_lag_cols
+        + rolling_cols
+        + agg_lag_cols
+        + weather_cols
+        + interaction_cols
     )
     print(f"[feat] Gesamt-Feature-Count: {len(feature_list)}")
 
