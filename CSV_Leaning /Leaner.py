@@ -4,7 +4,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
 PROJECT_DIR = BASE_DIR.parent
-WETTER_DIR = PROJECT_DIR / "participant_package" / "Wetterdaten Okt 25 - 23 Feb 26"
+WETTER_DIR = PROJECT_DIR / "participant_package" / "daten" / "wetterdaten"
 
 TIMEZONE = "Europe/Berlin"
 TIME_FORMAT = "%Y-%m-%dT%H:%M%z"
@@ -26,9 +26,9 @@ LOCATIONS = {
         "cth_temp": WETTER_DIR / "CTH_Temperatur_VC_Halle3 Okt 25 - 23 Feb 26.csv",
         "cth_wind": WETTER_DIR / "CTH_Wind_VC_Halle3  Okt 25 - 23 Feb 26.csv",
         "cth_wdir": BASE_DIR / "CTH_Windrichtung_VC_Halle3  Okt 25 - 23 Feb 26.csv",
-        "meteo": BASE_DIR / "open-meteo-Halle3.csv",
+        "meteo": BASE_DIR / "open-meteo.csv",
         "cth_out": BASE_DIR / "CTH_Halle3_lean.csv",
-        "meteo_out": BASE_DIR / "open-meteo-Halle3_lean.csv",
+        "meteo_out": BASE_DIR / "open-meteo_lean.csv",
     },
 }
 
@@ -70,6 +70,14 @@ def aggregate_hourly(df, agg_func="mean"):
     else:
         hourly = df.groupby("hour_utc")["Value"].mean().round(1).reset_index()
     hourly.columns = ["time", "value"]
+
+    # Stunden mit >50% gefilterten Werten → NaN (Sensordefekt für ganze Stunde)
+    nan_ratio = df.groupby("hour_utc")["Value"].apply(lambda x: x.isna().mean())
+    bad_hours = nan_ratio[nan_ratio > 0.5].index
+    if len(bad_hours) > 0:
+        hourly.loc[hourly["time"].isin(bad_hours), "value"] = np.nan
+        print(f"    Stunden mit >50% Sensordefekt → NaN: {len(bad_hours)}")
+
     return hourly
 
 
