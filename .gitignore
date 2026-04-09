@@ -1,2 +1,6 @@
 # data goes here
 /.venv
+.idea/
+__pycache__/
+*.pyc
+.DS_Store
