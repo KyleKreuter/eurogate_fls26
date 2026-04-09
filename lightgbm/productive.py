@@ -1,7 +1,7 @@
-"""Produktive RandomForest-Modelle fuer das Stacking-Ensemble.
+"""Produktive RandomForest-Modelle als Base-Modelle fuer das honest_blend.
 
-Dieses Skript erzeugt die beiden RandomForest-Submissions, die als
-Eingabe fuer das finale Stacking in stacking.py dienen:
+Dieses Skript erzeugt die beiden RandomForest-Submissions, die im
+honest_blend.py als Inputs kombiniert werden:
 
     legal_rf_big_s1.csv
         RF mit lag_48h und lag_72h zusaetzlich zu den Baseline-Lags.
