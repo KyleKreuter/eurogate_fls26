@@ -32,11 +32,14 @@ if str(_HERE) not in _sys.path:
 from weather_external import OPEN_METEO_VARIABLES, load_cth_weather  # noqa: E402
 
 from baseline import (  # noqa: E402
+    HARD_CUTOFF_TS,
+    OUTPUT_SUFFIX,
     PROJECT_ROOT,
     REEFER_CSV,
     SUBMISSIONS_DIR,
     TARGET_COL,
     TARGET_CSV,
+    extend_post_cutoff_with_mirror,
 )
 
 from sklearn.ensemble import RandomForestRegressor  # noqa: E402
@@ -45,7 +48,7 @@ from sklearn.ensemble import RandomForestRegressor  # noqa: E402
 # ---------------------------------------------------------------------------
 # Konfiguration
 # ---------------------------------------------------------------------------
-RF_RICHFEAT_OUT = SUBMISSIONS_DIR / "rf_richfeat.csv"
+RF_RICHFEAT_OUT = SUBMISSIONS_DIR / f"rf_richfeat{OUTPUT_SUFFIX}.csv"
 
 # Deutsche Feiertage / Besonderheiten im Trainings- und Targetfenster:
 #   Neujahr 01.01., Heilige Drei Koenige 06.01., Weihnachten 24.-26.12.,
@@ -79,13 +82,26 @@ SEASONAL_TRAIN_MONTHS: set[int] = {1, 2, 3, 11, 12}
 # ---------------------------------------------------------------------------
 # 1) Daten laden und stuendlich aggregieren
 # ---------------------------------------------------------------------------
-def load_hourly_richfeat(csv_path: Path) -> pd.DataFrame:
+def load_hourly_richfeat(
+    csv_path: Path,
+    cutoff: pd.Timestamp | None = None,
+) -> pd.DataFrame:
     """Liest reefer_release.csv und bildet pro Stunde eine Vielzahl Aggregate.
 
     Rueckgabe-DataFrame hat Spalte 'ts' + power_kw + alle stuendlichen
     Aggregat-Features. Die Zeitreihe ist lueckenlos 1h auf vollem Range.
+
+    Parameters
+    ----------
+    cutoff : Optional UTC-Timestamp. None -> Default HARD_CUTOFF_TS. Alle
+        Reefer-Rohdaten nach diesem Zeitpunkt werden sofort beim Read
+        verworfen (Leakage-Schutz).
     """
-    print(f"[load] Lese {csv_path.name} (kann 30-60s dauern, ~840 MB) ...")
+    effective_cutoff = HARD_CUTOFF_TS if cutoff is None else cutoff
+    print(
+        f"[load] Lese {csv_path.name} (kann 30-60s dauern, ~840 MB, "
+        f"cutoff={effective_cutoff}) ..."
+    )
     usecols = [
         "container_visit_uuid",
         "customer_uuid",
@@ -109,6 +125,16 @@ def load_hourly_richfeat(csv_path: Path) -> pd.DataFrame:
     print(f"[load] {len(df):,} Zeilen geladen, baue stuendliche Aggregate ...")
 
     df["EventTime"] = pd.to_datetime(df["EventTime"], utc=True)
+
+    if effective_cutoff is not None:
+        before = len(df)
+        df = df.loc[df["EventTime"] <= effective_cutoff]
+        dropped = before - len(df)
+        if dropped:
+            print(
+                f"[load] Leakage-Schutz: {dropped:,} Reefer-Zeilen nach "
+                f"{effective_cutoff} verworfen"
+            )
 
     # Normalisierung Hardware-Typ in grobe Familien
     ht = df["HardwareType"].astype(str)
@@ -441,6 +467,18 @@ def predict_p90_from_forest(
 def main() -> None:
     # --- Daten laden ---
     hourly = load_hourly_richfeat(REEFER_CSV)
+
+    # --- Leakage-Schutz: hourly reicht nur bis HARD_CUTOFF_TS. Erweitere
+    # per Mirror-Year bis zum Ende des Target-Fensters, damit lag_24h /
+    # lag_168h / agg_lag24h berechenbar bleiben, ohne jemals echte
+    # Post-Cutoff-Werte zu nutzen. ---
+    _targets_probe = pd.read_csv(TARGET_CSV)
+    _targets_probe["ts"] = pd.to_datetime(_targets_probe["timestamp_utc"], utc=True)
+    hourly = extend_post_cutoff_with_mirror(
+        hourly,
+        post_range_end=_targets_probe["ts"].max(),
+        cutoff=HARD_CUTOFF_TS,
+    )
 
     # --- Agg-Cols identifizieren (alle ausser ts und power_kw) ---
     agg_cols = [c for c in hourly.columns if c not in ("ts", TARGET_COL)]

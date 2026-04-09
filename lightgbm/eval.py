@@ -76,8 +76,18 @@ def load_ground_truth() -> pd.DataFrame:
 
     Rueckgabe: DataFrame mit Spalten ['ts', 'y_true'], eine Zeile pro
     Target-Timestamp, in der exakten Reihenfolge der target_timestamps.csv.
+
+    Sonderrolle gegenueber allen anderen Scripts: eval.py ist der EINZIGE
+    Ort, an dem reefer_release.csv ohne HARD_CUTOFF_TS gelesen werden darf.
+    Das ist der Scoring-Schritt und braucht naturgemaess die wahren
+    power_kw-Werte auch nach 2025-12-31. Alle Trainings-/Feature-Scripts
+    ruefen den Default-Cutoff an und sind damit leakage-frei.
     """
-    hourly = load_hourly_total(REEFER_CSV)
+    # cutoff=pd.NaT wuerde ignoriert, also explizit einen Datumswert in der
+    # Zukunft uebergeben, der garantiert alle echten Daten einschliesst.
+    hourly = load_hourly_total(
+        REEFER_CSV, cutoff=pd.Timestamp("2099-12-31 23:00:00", tz="UTC")
+    )
 
     targets = pd.read_csv(TARGET_CSV)
     targets["ts"] = pd.to_datetime(targets["timestamp_utc"], utc=True)

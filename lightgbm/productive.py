@@ -33,12 +33,15 @@ from sklearn.ensemble import RandomForestRegressor
 
 from baseline import (
     CONTAINER_MIX_BASE_COLS,
+    HARD_CUTOFF_TS,
+    OUTPUT_SUFFIX,
     PROJECT_ROOT,
     REEFER_CSV,
     SUBMISSIONS_DIR,
     TARGET_COL,
     TARGET_CSV,
     add_features,
+    extend_post_cutoff_with_mirror,
     load_hourly_with_container_mix,
 )
 
@@ -73,8 +76,8 @@ HOLIDAY_DATES: set = {
     pd.Timestamp("2026-01-06").date(),
 }
 
-BIG_OUT = SUBMISSIONS_DIR / "legal_rf_big_s1.csv"
-SMALL_OUT = SUBMISSIONS_DIR / "legal_rf_s1.csv"
+BIG_OUT = SUBMISSIONS_DIR / f"legal_rf_big_s1{OUTPUT_SUFFIX}.csv"
+SMALL_OUT = SUBMISSIONS_DIR / f"legal_rf_s1{OUTPUT_SUFFIX}.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +137,19 @@ def build_features(extra_lags: list[int] | None = None):
     """Baut hourly + Features + optional zusaetzliche Lags."""
     print("[feat] Lade Basis mit Container-Mix ...")
     hourly_mix = load_hourly_with_container_mix(REEFER_CSV)
+
+    # Leakage-Schutz: hourly_mix enthaelt jetzt nur noch Zeilen bis
+    # HARD_CUTOFF_TS. Fuer die Target-Stunden im Januar 2026 muessen wir die
+    # Reihe per Mirror-Year synthetisch fortschreiben, damit lag_24h/lag_168h
+    # und die Container-Mix-Lags wohldefiniert sind.
+    targets_probe = pd.read_csv(TARGET_CSV)
+    targets_probe["ts"] = pd.to_datetime(targets_probe["timestamp_utc"], utc=True)
+    hourly_mix = extend_post_cutoff_with_mirror(
+        hourly_mix,
+        post_range_end=targets_probe["ts"].max(),
+        cutoff=HARD_CUTOFF_TS,
+    )
+
     weather_df = load_weather()
 
     feat = add_features(hourly_mix)
