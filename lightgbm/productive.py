@@ -3,8 +3,8 @@
 Das ist das Modell, das wir aktiv iterieren und verbessern. Start-Konfiguration:
 
     baseline.py (minimale Features)
-    + Peak-Weighting (mult=10)                    <- aktuell aktiv
-    + Wetter-Features                              <- spaeter
+    + shortwave_radiation (Open-Meteo)            <- NEU
+    + Peak-Weighting                              <- aus
     + Container-Mix-Features (stack_tier, ...)    <- spaeter
     + P90-Calibration / Conformal Prediction      <- spaeter
 
@@ -19,35 +19,47 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+# WICHTIG: lokale Module (wie weather_external) MUESSEN vor `baseline`
+# importiert werden. baseline.py entfernt beim Module-Load das lightgbm/-
+# Verzeichnis aus sys.path (um die Namenskollision mit dem installierten
+# lightgbm-Package zu vermeiden), danach sind weitere lokale Imports nicht
+# mehr aufloesbar.
+from weather_external import load_cth_shortwave
+
 from baseline import (
+    FEATURES,
     PEAK_QUANTILE,
-    PROJECT_ROOT,
     SUBMISSIONS_DIR,
     run_training_and_submission,
 )
 
 
-# Peak-Weight-Multiplier fuer das Training. 1.0 = keine Gewichtung (identisch
-# zu baseline.py). Wir haben das aktuell auf 1.0 zurueckgesetzt, weil das
-# Tuning auf Okt/Nov/Dez (mult=10 gewinnt) auf dem Target-Fenster Anfang
-# Januar den Score VERSCHLECHTERT hat. Das ist ein Distribution-Shift-Fall:
-# Target-Fenster ist ein ruhiger Zeitraum ohne echte Peaks, da schadet das
-# Weighting. Wird neu getunt, sobald wir echte Features (Wetter, Container-Mix)
-# einbauen und/oder ein januar-aehnliches Val-Fenster haben.
+# ---------------------------------------------------------------------------
+# Konfiguration
+# ---------------------------------------------------------------------------
+# Peak-Weight-Multiplier. 1.0 = keine Gewichtung. Wir haben ihn bewusst auf
+# 1.0 gesetzt, weil das frueher auf Okt-Dez getunte mult=10 auf dem Januar-
+# Target-Fenster Distribution-Shift-artig schadet. Wird neu getunt, sobald
+# wir ein januar-aehnliches Val-Fenster haben.
 PEAK_MULTIPLIER: float = 1.0
+
+# Feature-Set fuer productive.py. Startet mit den 4 Baseline-Features plus
+# der neuen Wettervariablen. Weitere Features werden hier hinzugefuegt.
+PRODUCTIVE_FEATURES: list[str] = FEATURES + ["shortwave_radiation"]
 
 PRODUCTIVE_OUT = SUBMISSIONS_DIR / "productive.csv"
 
 
+# ---------------------------------------------------------------------------
+# Peak-Weights
+# ---------------------------------------------------------------------------
 def peak_weights_factory(
     multiplier: float, peak_quantile: float = PEAK_QUANTILE
 ):
     """Gibt eine Funktion zurueck, die aus einem Target-Vektor Sample-Weights macht.
 
     Stunden im oberen `peak_quantile`-Quantil bekommen `multiplier`, alle
-    anderen 1.0. Der umschliessende Factory-Aufbau ist noetig, weil
-    `run_training_and_submission` eine parameterlose Weight-Funktion erwartet
-    (sie bekommt nur den Target-Vektor).
+    anderen 1.0.
     """
     def _weight_fn(y: pd.Series) -> np.ndarray:
         y_arr = np.asarray(y, dtype=np.float64)
@@ -57,13 +69,14 @@ def peak_weights_factory(
     return _weight_fn
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 def main() -> None:
-    # mult=1.0 -> komplett ohne Weighting, exakt derselbe Pfad wie in
-    # baseline.py. Damit laesst sich per `diff submissions/baseline.csv
-    # submissions/productive.csv` bitgenau pruefen, dass beide Pipelines
-    # identisch sind.
+    print(f"[productive] Feature-Set: {PRODUCTIVE_FEATURES}")
+
     if PEAK_MULTIPLIER == 1.0:
-        print("[productive] Peak-Weighting AUS (mult=1.0) -> identisch zu baseline")
+        print("[productive] Peak-Weighting AUS (mult=1.0)")
         weight_fn = None
     else:
         print(
@@ -73,10 +86,21 @@ def main() -> None:
         weight_fn = peak_weights_factory(
             multiplier=PEAK_MULTIPLIER, peak_quantile=PEAK_QUANTILE
         )
+
+    # Wetter-Daten laden (aus Open-Meteo-Cache, ggf. Erstdownload)
+    weather = load_cth_shortwave()
+    print(
+        f"[productive] weather: {len(weather)} Zeilen, "
+        f"shortwave mean={weather['shortwave_radiation'].mean():.1f}, "
+        f"max={weather['shortwave_radiation'].max():.1f} W/m^2"
+    )
+
     run_training_and_submission(
         weight_fn=weight_fn,
         out_path=PRODUCTIVE_OUT,
         label="productive",
+        extra_features_df=weather,
+        features=PRODUCTIVE_FEATURES,
     )
 
 

@@ -46,7 +46,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATEN_DIR = PROJECT_ROOT / "participant_package" / "daten"
 REEFER_CSV = DATEN_DIR / "reefer_release.csv"
 TARGET_CSV = DATEN_DIR / "target_timestamps.csv"
-SUBMISSIONS_DIR = PROJECT_ROOT / "submissions"
+# Result-Dateien leben unterhalb des lightgbm/-Ordners, nicht im Projekt-Root.
+LIGHTGBM_DIR = Path(__file__).resolve().parent
+SUBMISSIONS_DIR = LIGHTGBM_DIR / "submissions"
 BASELINE_OUT = SUBMISSIONS_DIR / "baseline.csv"
 
 FEATURES: list[str] = ["hour", "dow", "lag_24h", "lag_168h"]
@@ -182,12 +184,13 @@ def run_training_and_submission(
     weight_fn=None,
     out_path: Path = BASELINE_OUT,
     label: str = "baseline",
+    extra_features_df: pd.DataFrame | None = None,
+    features: list[str] | None = None,
 ) -> pd.DataFrame:
     """Trainiert Point- und P90-Modell und schreibt eine Submission.
 
-    Diese Funktion wird sowohl von baseline.main() (ohne Gewichte) als auch
-    von productive.main() (mit Gewichten) verwendet, damit der Code zwischen
-    den beiden Pfaden geteilt bleibt.
+    Shared-Pipeline-Funktion fuer baseline.py (ohne Extras) und productive.py
+    (mit Peak-Weighting, Zusatz-Features wie Wetter, ...).
 
     Parameters
     ----------
@@ -195,8 +198,17 @@ def run_training_and_submission(
         Bekommt die Trainings-Targets und gibt das Sample-Weight-Array zurueck.
         None -> kein Weighting (baseline).
     out_path : Wo die Submission-CSV landet.
-    label : Nur fuer Log-Ausgaben, damit man sieht, welches Skript laeuft.
+    label : Nur fuer Log-Ausgaben.
+    extra_features_df : Optional DataFrame mit Spalte 'ts' plus beliebig vielen
+        weiteren Spalten (z.B. shortwave_radiation). Wird per left-join auf
+        `ts` in den Feature-DataFrame gemerged, bevor die Lag-NaNs gedroppt
+        werden. None -> keine Zusatz-Features (baseline).
+    features : Optional Feature-Liste, die fuer Training/Prediction verwendet
+        wird. None -> die minimalen Baseline-FEATURES. Wenn extra_features_df
+        uebergeben wird, muss `features` auch die neuen Spaltennamen enthalten.
     """
+    feat_list = features if features is not None else FEATURES
+
     hourly = load_hourly_total(REEFER_CSV)
     print(
         f"[{label}] Zeitbereich: {hourly['ts'].min()} -> {hourly['ts'].max()}, "
@@ -208,7 +220,18 @@ def run_training_and_submission(
         f"mean={hourly[TARGET_COL].mean():.1f}"
     )
 
-    feat = add_features(hourly).dropna(subset=FEATURES).reset_index(drop=True)
+    feat = add_features(hourly)
+
+    if extra_features_df is not None:
+        before = len(feat)
+        feat = feat.merge(extra_features_df, on="ts", how="left")
+        added = [c for c in extra_features_df.columns if c != "ts"]
+        print(
+            f"[{label}] Extra-Features gejoint: {added} "
+            f"(Zeilen vorher/nachher: {before}/{len(feat)})"
+        )
+
+    feat = feat.dropna(subset=feat_list).reset_index(drop=True)
 
     targets = pd.read_csv(TARGET_CSV)
     targets["ts"] = pd.to_datetime(targets["timestamp_utc"], utc=True)
@@ -222,20 +245,20 @@ def run_training_and_submission(
     # Training strikt VOR dem Target-Fenster, damit das Modell nie das
     # Target-Ground-Truth zu Gesicht bekommt.
     train_df = feat.loc[feat["ts"] < target_start].copy()
-    print(f"[{label}] {len(train_df)} Trainings-Zeilen")
+    print(f"[{label}] {len(train_df)} Trainings-Zeilen, features={feat_list}")
 
     weight = weight_fn(train_df[TARGET_COL]) if weight_fn is not None else None
 
     print(f"[{label}] Trainiere Point-Modell (regression_l1) ...")
     m_point = train_lgbm(
-        train_df[FEATURES],
+        train_df[feat_list],
         train_df[TARGET_COL],
         objective="regression_l1",
         weight=weight,
     )
     print(f"[{label}] Trainiere P90-Modell (quantile alpha=0.9) ...")
     m_p90 = train_lgbm(
-        train_df[FEATURES],
+        train_df[feat_list],
         train_df[TARGET_COL],
         objective="quantile",
         alpha=0.9,
@@ -244,12 +267,12 @@ def run_training_and_submission(
     # Feature-Zeilen fuer die Target-Timestamps aus dem vollstaendigen feat-Set
     # holen. Lag-Werte beziehen sich auf tatsaechliche historische power_kw.
     target_feat = targets[["ts"]].merge(feat, on="ts", how="left")
-    missing = int(target_feat[FEATURES].isna().any(axis=1).sum())
+    missing = int(target_feat[feat_list].isna().any(axis=1).sum())
     if missing:
         print(f"[{label}] WARN: {missing} Target-Stunden ohne Feature-Match")
 
-    pred_point = m_point.predict(target_feat[FEATURES])
-    pred_p90 = m_p90.predict(target_feat[FEATURES])
+    pred_point = m_point.predict(target_feat[feat_list])
+    pred_p90 = m_p90.predict(target_feat[feat_list])
     # Harte Submission-Regel: pred_p90_kw >= pred_power_kw
     pred_p90 = np.maximum(pred_p90, pred_point)
     # Keine negativen Werte
