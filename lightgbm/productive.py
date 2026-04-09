@@ -2,9 +2,11 @@
 
 Das ist das Modell, das wir aktiv iterieren und verbessern. Start-Konfiguration:
 
-    baseline.py (minimale Features)
-    + shortwave_radiation (Open-Meteo)            <- NEU
-    + Peak-Weighting                              <- aus
+    baseline.py (minimale Features: hour, dow, lag_24h, lag_168h)
+    + shortwave_radiation (Open-Meteo)            <- aktiv
+    + temperature_2m      (Open-Meteo)            <- aktiv (NEU)
+    + wind_speed_10m      (Open-Meteo)            <- aktiv (NEU)
+    + Peak-Weighting                              <- aus (mult=1.0)
     + Container-Mix-Features (stack_tier, ...)    <- spaeter
     + P90-Calibration / Conformal Prediction      <- spaeter
 
@@ -24,7 +26,7 @@ import pandas as pd
 # Verzeichnis aus sys.path (um die Namenskollision mit dem installierten
 # lightgbm-Package zu vermeiden), danach sind weitere lokale Imports nicht
 # mehr aufloesbar.
-from weather_external import load_cth_shortwave
+from weather_external import OPEN_METEO_VARIABLES, load_cth_weather
 
 from baseline import (
     FEATURES,
@@ -43,9 +45,9 @@ from baseline import (
 # wir ein januar-aehnliches Val-Fenster haben.
 PEAK_MULTIPLIER: float = 1.0
 
-# Feature-Set fuer productive.py. Startet mit den 4 Baseline-Features plus
-# der neuen Wettervariablen. Weitere Features werden hier hinzugefuegt.
-PRODUCTIVE_FEATURES: list[str] = FEATURES + ["shortwave_radiation"]
+# Feature-Set fuer productive.py. Baseline-Features plus alle drei Open-Meteo-
+# Variablen. Weitere Features werden hier angehaengt.
+PRODUCTIVE_FEATURES: list[str] = FEATURES + OPEN_METEO_VARIABLES
 
 PRODUCTIVE_OUT = SUBMISSIONS_DIR / "productive.csv"
 
@@ -88,12 +90,14 @@ def main() -> None:
         )
 
     # Wetter-Daten laden (aus Open-Meteo-Cache, ggf. Erstdownload)
-    weather = load_cth_shortwave()
-    print(
-        f"[productive] weather: {len(weather)} Zeilen, "
-        f"shortwave mean={weather['shortwave_radiation'].mean():.1f}, "
-        f"max={weather['shortwave_radiation'].max():.1f} W/m^2"
-    )
+    weather = load_cth_weather()
+    print(f"[productive] weather: {len(weather)} Zeilen, Variablen={OPEN_METEO_VARIABLES}")
+    for var in OPEN_METEO_VARIABLES:
+        s = weather[var]
+        print(
+            f"[productive]   {var:<22} "
+            f"min={s.min():7.1f}  max={s.max():7.1f}  mean={s.mean():7.1f}"
+        )
 
     run_training_and_submission(
         weight_fn=weight_fn,

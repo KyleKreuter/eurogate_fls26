@@ -2,17 +2,27 @@
 
 Die Open-Meteo-Archive-API (https://archive-api.open-meteo.com) liefert
 kostenlose stuendliche Wetter-Historie ohne API-Key. Wir laden einmalig
-die gewuenschten Variablen fuer den Standort CTH Hamburg-Waltershof und
-cachen das Ergebnis als CSV unter
-`participant_package/daten/external/openmeteo_cth_hamburg.csv`.
+die drei relevanten Variablen fuer den Standort CTH Hamburg-Waltershof
+und cachen das Ergebnis als CSV unter:
+    `weather_data_lean/final/open_meteo_complete/openmeteo_cth_hamburg.csv`
+
+Die drei Variablen:
+    - shortwave_radiation  (W/m^2)  - Sonneneinstrahlung
+    - temperature_2m       (deg C)  - Lufttemperatur 2 m
+    - wind_speed_10m       (km/h)   - Windgeschwindigkeit 10 m
+
+wind_direction_10m ist bewusst weggelassen: schwache Korrelation zwischen
+CTH-Station und OpenMeteo-Reanalyse (MAE ~44 deg), zirkulaere Variable,
+und physikalisch kein starker Prediktor fuer Reefer-Stromverbrauch.
 
 Beim zweiten Aufruf wird die CSV gelesen statt neu geladen. Die Cache-CSV
 committen wir mit ins Repo - dadurch braucht der Organizer-Rerun keine
 Internetverbindung.
 
 Benutzung:
-    from weather_external import load_cth_shortwave
-    weather = load_cth_shortwave()   # DataFrame: ts (UTC), shortwave_radiation
+    from weather_external import load_cth_weather
+    weather = load_cth_weather()
+    # DataFrame: ts (UTC), shortwave_radiation, temperature_2m, wind_speed_10m
 """
 
 from __future__ import annotations
@@ -31,10 +41,29 @@ CTH_LONGITUDE: float = 9.924
 DEFAULT_START: str = "2025-01-01"
 DEFAULT_END: str = "2026-01-10"
 
-# Cache-Location
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-EXTERNAL_DIR = PROJECT_ROOT / "participant_package" / "daten" / "external"
-OPENMETEO_CACHE = EXTERNAL_DIR / "openmeteo_cth_hamburg.csv"
+
+# Cache-Location fuer den Eigen-Download aus der Open-Meteo-API. Liegt bewusst
+# unter weather_data_lean/final/open_meteo_complete/, damit alle Wetter-Quellen
+# nebeneinander an einem Ort liegen (lean-Files und vollstaendiger Cache).
+OPEN_METEO_CACHE_DIR = PROJECT_ROOT / "weather_data_lean" / "final" / "open_meteo_complete"
+OPENMETEO_CACHE = OPEN_METEO_CACHE_DIR / "openmeteo_cth_hamburg.csv"
+
+# Die drei Variablen, die wir von Open-Meteo wollen. wind_direction_10m ist
+# bewusst weggelassen (s. Modul-Docstring).
+OPEN_METEO_VARIABLES: list[str] = [
+    "shortwave_radiation",
+    "temperature_2m",
+    "wind_speed_10m",
+]
+
+# Pfade zu den bereits aufbereiteten "lean" Wetter-Dateien (von Kyle vorbereitet).
+# CTH_lean.csv ist die echte Messstation am Container Terminal Hamburg.
+# open-meteo_lean.csv ist eine Open-Meteo-Reanalyse fuer denselben Zeitraum.
+# Beide haben identische Spalten, damit sie vergleichbar sind.
+LEAN_WEATHER_DIR = PROJECT_ROOT / "weather_data_lean" / "final"
+CTH_LEAN_CSV = LEAN_WEATHER_DIR / "CTH_lean.csv"
+OPENMETEO_LEAN_CSV = LEAN_WEATHER_DIR / "open-meteo_lean.csv"
 
 
 def download_openmeteo(
@@ -100,32 +129,41 @@ def download_openmeteo(
     return df
 
 
-def load_cth_shortwave(
+def load_cth_weather(
     start: str = DEFAULT_START,
     end: str = DEFAULT_END,
     force: bool = False,
 ) -> pd.DataFrame:
-    """Convenience: laedt shortwave_radiation fuer CTH Hamburg-Waltershof."""
+    """Laedt shortwave_radiation + temperature_2m + wind_speed_10m fuer CTH Hamburg.
+
+    Rueckgabe: DataFrame mit Spalten ['ts', 'shortwave_radiation',
+    'temperature_2m', 'wind_speed_10m']. `ts` ist UTC-aware.
+    """
     return download_openmeteo(
         latitude=CTH_LATITUDE,
         longitude=CTH_LONGITUDE,
         start=start,
         end=end,
-        variables=["shortwave_radiation"],
+        variables=OPEN_METEO_VARIABLES,
         cache_path=OPENMETEO_CACHE,
         force=force,
     )
 
 
 if __name__ == "__main__":
-    # Direkter Aufruf: forciert Download, zeigt Sanity-Stats.
-    df = load_cth_shortwave(force=True)
+    # Direkter Aufruf: forciert Download, zeigt Sanity-Stats fuer alle Variablen.
+    df = load_cth_weather(force=True)
     print()
     print(f"Zeilen       : {len(df)}")
     print(f"Zeitbereich  : {df['ts'].min()} -> {df['ts'].max()}")
-    print(
-        f"shortwave    : min={df['shortwave_radiation'].min():.1f}, "
-        f"max={df['shortwave_radiation'].max():.1f}, "
-        f"mean={df['shortwave_radiation'].mean():.1f} W/m^2"
-    )
-    print(f"NaN-Anteil   : {df['shortwave_radiation'].isna().mean():.4%}")
+    for var in OPEN_METEO_VARIABLES:
+        s = df[var]
+        unit = {
+            "shortwave_radiation": "W/m^2",
+            "temperature_2m": "deg C",
+            "wind_speed_10m": "km/h",
+        }.get(var, "")
+        print(
+            f"  {var:<22} min={s.min():7.2f}  max={s.max():7.2f}  "
+            f"mean={s.mean():7.2f}  NaN={s.isna().sum():3d}  {unit}"
+        )
