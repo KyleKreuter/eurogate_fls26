@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "catboost>=1.2.10",
+    "holidays>=0.94",
     "lightgbm>=4.6.0",
     "numpy>=2.4.4",
     "pandas>=3.0.2",

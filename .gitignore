@@ -1,6 +1,22 @@
-# data goes here
-/.venv
-.idea/
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+
+# Virtual env
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
 .DS_Store
+
+# Claude Code worktrees (isolated agent runs, should not be committed)
+.claude/
+
+# CatBoost training artifacts
+catboost_info/
