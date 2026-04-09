@@ -35,6 +35,7 @@ from baseline import (
     CONTAINER_MIX_BASE_COLS,
     HARD_CUTOFF_TS,
     OUTPUT_SUFFIX,
+    PEAK_QUANTILE,
     PROJECT_ROOT,
     REEFER_CSV,
     SUBMISSIONS_DIR,
@@ -78,6 +79,22 @@ HOLIDAY_DATES: set = {
 
 BIG_OUT = SUBMISSIONS_DIR / f"legal_rf_big_s1{OUTPUT_SUFFIX}.csv"
 SMALL_OUT = SUBMISSIONS_DIR / f"legal_rf_s1{OUTPUT_SUFFIX}.csv"
+
+# Peak-Weighting-Konfiguration.
+#
+# DEFAULT: DEAKTIVIERT (USE_PEAK_WEIGHTING=False). Eine empirische
+# Evaluation am 2026-04-10 hat gezeigt, dass Peak-Weighting den combined
+# Score fuer den Januar-Target verschlechtert. Grund: Die Peak-Schwelle
+# wird ueber das gesamte Trainings-Set berechnet (~1380 kW), das von
+# Sommer-Peaks (Juli/August, 1100-1400 kW) dominiert wird. Der Januar
+# hat aber max=1028 kW - kein einziger echter Target-Peak erreicht die
+# Trainings-Peak-Schwelle. Peak-Weighting pusht damit einen Sommer-Bias
+# ins Modell und verschlechtert mae_peak im Januar.
+#
+# Der Code ist als Reserve drin und kann fuer saisonal passende Target-
+# Fenster (Sommer/Herbst) wieder aktiviert werden.
+USE_PEAK_WEIGHTING: bool = False
+PEAK_WEIGHT_MULTIPLIER: float = 3.0
 
 
 # ---------------------------------------------------------------------------
@@ -209,13 +226,42 @@ def write_submission(ts_col, point, p90, out_path: Path) -> None:
     )
 
 
+def make_peak_weights(
+    y_train: np.ndarray,
+    peak_quantile: float = PEAK_QUANTILE,
+    peak_multiplier: float = PEAK_WEIGHT_MULTIPLIER,
+) -> np.ndarray:
+    """Sample-Weights fuer peak-bewusstes RF-Training.
+
+    Zeilen, deren Trainings-Target im oberen (1 - peak_quantile)-Anteil
+    liegt, bekommen `peak_multiplier`-faches Gewicht, alle anderen 1.0.
+    Damit "sieht" der RandomForest die Peak-Stunden im Loss-Beitrag haeufiger
+    und splittet praeferenziell auf Features, die Peak-Verhalten erklaeren.
+
+    Die Wahl peak_quantile=PEAK_QUANTILE (=0.85) ist bewusst konsistent mit
+    der Scoring-Definition in eval.py / baseline.mae_peak: top 15% der
+    wahren Werte = "Peak-Stunden". Gleicher Schwellenwert, damit wir im
+    Training exakt die Stunden betonen, auf denen wir auch bewertet werden.
+    """
+    threshold = float(np.quantile(y_train, peak_quantile))
+    weights = np.where(y_train >= threshold, peak_multiplier, 1.0).astype(np.float64)
+    n_peak = int((weights > 1.0).sum())
+    print(
+        f"[weight] Peak-Schwelle (q={peak_quantile}): {threshold:.1f} kW, "
+        f"{n_peak}/{len(y_train)} Zeilen mit {peak_multiplier}x Gewicht"
+    )
+    return weights
+
+
 def train_rf(
     X_train, y_train, X_target,
     *, n_estimators, min_samples_leaf, max_features, seed, label,
+    sample_weights: np.ndarray | None = None,
 ):
     print(
         f"[{label}] Trainiere RF: n_est={n_estimators}, "
-        f"min_leaf={min_samples_leaf}, max_feat={max_features}, seed={seed}"
+        f"min_leaf={min_samples_leaf}, max_feat={max_features}, seed={seed}, "
+        f"peak_weighting={'ja' if sample_weights is not None else 'nein'}"
     )
     rf = RandomForestRegressor(
         n_estimators=n_estimators,
@@ -226,7 +272,7 @@ def train_rf(
         n_jobs=-1,
         random_state=seed,
     )
-    rf.fit(X_train, y_train)
+    rf.fit(X_train, y_train, sample_weight=sample_weights)
     point = rf.predict(X_target)
     tree_preds = np.column_stack(
         [est.predict(X_target) for est in rf.estimators_]
@@ -239,16 +285,19 @@ def train_rf(
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
+    label_tag = "peak-gewichtet" if USE_PEAK_WEIGHTING else "unweighted"
+
     # ----- Modell 1: legal_rf_big_s1 (mit lag_48h und lag_72h) -----
     print()
     print("=" * 72)
-    print("Modell 1: legal_rf_big_s1 (RF mit lag_48h + lag_72h)")
+    print(f"Modell 1: legal_rf_big_s1 (RF mit lag_48h + lag_72h, {label_tag})")
     print("=" * 72)
     train_df, target_feat, features = build_features(extra_lags=[48, 72])
     X_train = train_df[features].to_numpy()
     y_train = train_df[TARGET_COL].to_numpy()
     X_target = target_feat[features].to_numpy()
     ts_col = target_feat["ts"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    weights_big = make_peak_weights(y_train) if USE_PEAK_WEIGHTING else None
 
     point, p90 = train_rf(
         X_train, y_train, X_target,
@@ -257,19 +306,21 @@ def main() -> None:
         max_features=0.5,
         seed=1,
         label="big_s1",
+        sample_weights=weights_big,
     )
     write_submission(ts_col, point, p90, BIG_OUT)
 
     # ----- Modell 2: legal_rf_s1 (nur Baseline-Lags) -----
     print()
     print("=" * 72)
-    print("Modell 2: legal_rf_s1 (RF mit lag_24h + lag_168h)")
+    print(f"Modell 2: legal_rf_s1 (RF mit lag_24h + lag_168h, {label_tag})")
     print("=" * 72)
     train_df, target_feat, features = build_features(extra_lags=None)
     X_train = train_df[features].to_numpy()
     y_train = train_df[TARGET_COL].to_numpy()
     X_target = target_feat[features].to_numpy()
     ts_col = target_feat["ts"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    weights_s1 = make_peak_weights(y_train) if USE_PEAK_WEIGHTING else None
 
     point, p90 = train_rf(
         X_train, y_train, X_target,
@@ -278,6 +329,7 @@ def main() -> None:
         max_features=0.5,
         seed=1,
         label="s1",
+        sample_weights=weights_s1,
     )
     write_submission(ts_col, point, p90, SMALL_OUT)
 

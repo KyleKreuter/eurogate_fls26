@@ -40,6 +40,7 @@ Ausfuehren (vom Projekt-Root):
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -70,10 +71,20 @@ BLEND_OUT = SUBMISSIONS_DIR / "honest_blend.csv"
 
 # Die beim Organizer-Rerun garantiert ausgelieferte Strategie. Hardcoded,
 # damit keine impliziten Auswahl-Bias ueber Ground-Truth moeglich ist.
-# Wenn diese Strategie aus irgendeinem Grund im Strategien-Dict fehlt,
-# wird das Skript hart abbrechen - wir wollen NIE stillschweigend auf
-# eine andere Strategie ausweichen.
-SUBMIT_STRATEGY: str = "uniform_3_rf"
+#
+# Priorisierung:
+#   1. Wenn blend_weights.json (aus tune_blend.py) existiert, wird automatisch
+#      die Strategie 'custom_weighted' gebaut und als SUBMIT_STRATEGY gewaehlt.
+#      Die Gewichte stammen aus einem Dec-Holdout-CV (2025-12-15 bis 2025-12-31)
+#      und sind damit legitim out-of-sample.
+#   2. Falls die JSON fehlt oder nicht ladbar ist: Fallback auf 'uniform_3_rf'.
+#
+# In beiden Faellen bricht das Skript hart ab, wenn die final gewaehlte
+# Strategie nicht im Strategien-Dict liegt - wir wollen NIE stillschweigend
+# auf eine andere Strategie ausweichen.
+DEFAULT_SUBMIT_STRATEGY: str = "uniform_3_rf"
+CUSTOM_STRATEGY_NAME: str = "custom_weighted"
+BLEND_WEIGHTS_JSON = _HERE / "blend_weights.json"
 
 POOL_NAMES: list[str] = [
     "baseline.csv",
@@ -128,14 +139,43 @@ def load_submission_aligned(path: Path, gt_ts: pd.Series) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Strategien
 # ---------------------------------------------------------------------------
+def load_tuned_weights() -> dict | None:
+    """Liest blend_weights.json wenn vorhanden, sonst None.
+
+    Erwartetes Format (aus tune_blend.py):
+        {
+            "models": ["legal_rf_big_s1", "legal_rf_s1", "rf_richfeat"],
+            "weights": [0.42, 0.31, 0.27],
+            "p90_source": "rf_richfeat",
+            ...
+        }
+    """
+    if not BLEND_WEIGHTS_JSON.exists():
+        return None
+    try:
+        payload = json.loads(BLEND_WEIGHTS_JSON.read_text())
+    except json.JSONDecodeError as exc:
+        print(f"[blend] WARN: blend_weights.json nicht parsebar ({exc}), ignoriere")
+        return None
+    required = {"models", "weights"}
+    if not required.issubset(payload):
+        print("[blend] WARN: blend_weights.json hat nicht die erwarteten Keys, ignoriere")
+        return None
+    return payload
+
+
 def build_strategies(
     points: dict[str, np.ndarray],
     p90_fixed: np.ndarray,
+    tuned_weights: dict | None = None,
 ) -> dict[str, dict[str, np.ndarray]]:
     """Baut alle a priori festgelegten Blend-Strategien.
 
     Jede Strategie ist ein dict mit 'point' und 'p90'. Keine der Strategien
-    verwendet y_true bei der Konstruktion der Gewichte.
+    verwendet y_true im TARGET-Fenster bei der Konstruktion der Gewichte.
+    Die optionale 'custom_weighted'-Strategie nutzt Gewichte aus
+    tune_blend.py, die auf einem Dec-Holdout (ausserhalb des Target-Fensters)
+    gelernt wurden - das ist OUT-OF-SAMPLE fuer Januar und damit legitim.
     """
     rf_big = points["legal_rf_big_s1.csv"]
     rf_s1 = points["legal_rf_s1.csv"]
@@ -188,6 +228,33 @@ def build_strategies(
         "point": np.median(stack5, axis=0),
         "p90": p90_fixed,
     }
+
+    # 9) Custom-Weighted (nur wenn blend_weights.json verfuegbar war).
+    # Die Gewichte kommen aus tune_blend.py's Dec-Holdout-CV und werden hier
+    # 1:1 auf die 3 RF-Modelle angewendet. Reihenfolge muss mit tuned_weights
+    # ["models"] matchen.
+    if tuned_weights is not None:
+        name_to_array = {
+            "legal_rf_big_s1": rf_big,
+            "legal_rf_s1": rf_s1,
+            "rf_richfeat": rf_rich,
+        }
+        models = tuned_weights["models"]
+        weights = tuned_weights["weights"]
+        if len(models) != len(weights):
+            raise ValueError(
+                f"blend_weights.json inkonsistent: {len(models)} models "
+                f"vs {len(weights)} weights"
+            )
+        missing = [m for m in models if m not in name_to_array]
+        if missing:
+            raise ValueError(
+                f"blend_weights.json referenziert unbekannte Modelle: {missing}"
+            )
+        point = np.sum(
+            [w * name_to_array[m] for w, m in zip(weights, models)], axis=0
+        )
+        strategies[CUSTOM_STRATEGY_NAME] = {"point": point, "p90": p90_fixed}
 
     return strategies
 
@@ -246,11 +313,29 @@ def main() -> None:
     p90_fixed = subs[P90_SOURCE]["pred_p90_kw"].to_numpy()
     print(f"[blend] P90-Source (a priori fest): {P90_SOURCE}")
 
-    # 4) Strategien bauen
-    strategies = build_strategies(points, p90_fixed)
-    if SUBMIT_STRATEGY not in strategies:
+    # 4) Tuned-Weights aus blend_weights.json laden (optional). Wenn
+    # verfuegbar, wird SUBMIT_STRATEGY = custom_weighted, sonst Fallback.
+    tuned = load_tuned_weights()
+    if tuned is not None:
+        print(
+            f"\n[blend] blend_weights.json gefunden "
+            f"(tuned on {tuned.get('tuned_on', '?')}):"
+        )
+        for m, w in zip(tuned["models"], tuned["weights"]):
+            print(f"  {m:<22}  w = {w:.4f}")
+        submit_strategy = CUSTOM_STRATEGY_NAME
+    else:
+        print(
+            f"\n[blend] blend_weights.json nicht gefunden, "
+            f"verwende Default-Strategie {DEFAULT_SUBMIT_STRATEGY!r}"
+        )
+        submit_strategy = DEFAULT_SUBMIT_STRATEGY
+
+    # 5) Strategien bauen (inkl. evtl. custom_weighted)
+    strategies = build_strategies(points, p90_fixed, tuned_weights=tuned)
+    if submit_strategy not in strategies:
         raise RuntimeError(
-            f"SUBMIT_STRATEGY={SUBMIT_STRATEGY!r} fehlt im Strategien-Dict "
+            f"submit_strategy={submit_strategy!r} fehlt im Strategien-Dict "
             f"{sorted(strategies)}. Bitte Code pruefen - keine Fallback-Auswahl."
         )
 
@@ -280,7 +365,7 @@ def main() -> None:
                 f"{mae_peak(y_true, p):9.2f} {pinball(y_true, own_p90):8.2f}"
             )
 
-        strategies_gt = build_strategies(points_gt, p90_fixed_gt)
+        strategies_gt = build_strategies(points_gt, p90_fixed_gt, tuned_weights=tuned)
         print(f"\n[blend] === Blend-Strategien (p90 aus {P90_SOURCE}) ===")
         print(
             f"  {'strategy':<25} {'combined':>9} {'mae_all':>9} "
@@ -289,16 +374,17 @@ def main() -> None:
         for name, s in strategies_gt.items():
             point = s["point"]
             p90 = np.maximum(s["p90"], point)
-            marker = "  <- SUBMIT" if name == SUBMIT_STRATEGY else ""
+            marker = "  <- SUBMIT" if name == submit_strategy else ""
             print(
                 f"  {name:<25} {combined(y_true, point, p90):9.2f} "
                 f"{mae(y_true, point):9.2f} {mae_peak(y_true, point):9.2f} "
                 f"{pinball(y_true, p90):8.2f}{marker}"
             )
 
-    # 6) Finale Submission - FEST auf SUBMIT_STRATEGY. Keine Auswahl, kein
-    # Bias, keine Ausnahmen.
-    chosen = strategies[SUBMIT_STRATEGY]
+    # 6) Finale Submission - FEST auf submit_strategy (custom_weighted wenn
+    # blend_weights.json vorhanden, sonst uniform_3_rf). Keine Auswahl nach
+    # GT, keine Ausnahmen.
+    chosen = strategies[submit_strategy]
     point = chosen["point"]
     p90 = np.maximum(chosen["p90"], point)
 
@@ -312,7 +398,7 @@ def main() -> None:
     BLEND_OUT.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(BLEND_OUT, index=False, float_format="%.2f")
     print(
-        f"\n[blend] SUBMIT_STRATEGY={SUBMIT_STRATEGY!r} -> "
+        f"\n[blend] submit_strategy={submit_strategy!r} -> "
         f"{BLEND_OUT.relative_to(BLEND_OUT.parents[2])} ({len(out)} Zeilen)"
     )
     print(
