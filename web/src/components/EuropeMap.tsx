@@ -12,12 +12,22 @@ const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 interface EuropeMapProps {
   hoveredTerminal: string | null;
+  selectedTerminal?: string | null;
   onHoverTerminal: (id: string | null) => void;
   onClickTerminal: (id: string) => void;
 }
 
+const COLOR_INACTIVE = "#2980B9"; // var(--accent-primary)
+const COLOR_HOVER = "#0b0222"; // var(--eg-navy)
+const COLOR_ACTIVE = "#E67E22"; // var(--warning) — Hamburg beacon
+
+/**
+ * Eurogate 9-terminal map on Mapbox light-v11. Orange Hamburg beacon,
+ * blue inactive markers, navy on hover. Used by the landing split-screen.
+ */
 export function EuropeMap({
   hoveredTerminal,
+  selectedTerminal,
   onHoverTerminal,
   onClickTerminal,
 }: EuropeMapProps) {
@@ -29,7 +39,7 @@ export function EuropeMap({
       if (map) {
         map.flyTo({
           center: terminal.coordinates,
-          zoom: 6,
+          zoom: 5.2,
           duration: 1400,
           essential: true,
         });
@@ -47,11 +57,11 @@ export function EuropeMap({
       mapboxAccessToken={MAPBOX_TOKEN}
       initialViewState={{
         longitude: 15,
-        latitude: 42,
-        zoom: 3.3,
+        latitude: 44,
+        zoom: 3.4,
       }}
       style={{ width: "100%", height: "100%" }}
-      mapStyle="mapbox://styles/mapbox/dark-v11"
+      mapStyle="mapbox://styles/mapbox/light-v11"
       interactive={true}
       scrollZoom={false}
       dragPan={true}
@@ -61,8 +71,16 @@ export function EuropeMap({
     >
       {TERMINALS.map((terminal) => {
         const isHovered = hoveredTerminal === terminal.id;
+        const isSelected = selectedTerminal === terminal.id;
         const isActive = terminal.active;
-        const isHighlighted = isHovered || isActive;
+        const showBeacon = isActive;
+        const color = isHovered
+          ? COLOR_HOVER
+          : isActive
+            ? COLOR_ACTIVE
+            : isSelected
+              ? COLOR_HOVER
+              : COLOR_INACTIVE;
 
         return (
           <Marker
@@ -78,27 +96,15 @@ export function EuropeMap({
               onMouseLeave={() => onHoverTerminal(null)}
               onClick={() => handleMarkerClick(terminal)}
             >
-              {/* Pulse ring for active/hovered */}
-              {isHighlighted && (
+              {/* Pulse ring only on the Hamburg beacon */}
+              {showBeacon && (
                 <span
                   className="absolute rounded-full marker-pulse"
                   style={{
-                    width: 24,
-                    height: 24,
-                    background: "var(--td-secondary)",
-                  }}
-                />
-              )}
-
-              {/* Outer glow ring */}
-              {isHighlighted && (
-                <span
-                  className="absolute rounded-full"
-                  style={{
-                    width: 20,
-                    height: 20,
-                    border: "1px solid var(--td-secondary)",
-                    opacity: 0.4,
+                    width: 26,
+                    height: 26,
+                    background: COLOR_ACTIVE,
+                    opacity: 0.45,
                   }}
                 />
               )}
@@ -107,52 +113,69 @@ export function EuropeMap({
               <span
                 className="relative rounded-full transition-all duration-150"
                 style={{
-                  width: isHovered ? 12 : isActive ? 10 : 7,
-                  height: isHovered ? 12 : isActive ? 10 : 7,
-                  background: isHighlighted
-                    ? "var(--td-secondary)"
-                    : "rgba(255,255,255,0.8)",
-                  boxShadow: isHighlighted
-                    ? "0 0 12px rgba(255,180,168,0.5)"
-                    : "0 0 6px rgba(255,255,255,0.3)",
+                  width: isHovered || isActive ? 12 : 8,
+                  height: isHovered || isActive ? 12 : 8,
+                  background: color,
+                  border: "2px solid #ffffff",
+                  boxShadow:
+                    isHovered || isActive
+                      ? `0 0 0 2px ${color}33, 0 2px 4px rgba(11,2,34,0.15)`
+                      : "0 1px 3px rgba(11,2,34,0.15)",
                 }}
               />
 
               {/* City label on hover */}
               {isHovered && (
                 <div
-                  className="absolute bottom-full mb-2 whitespace-nowrap px-2.5 py-1 text-[10px] font-bold tracking-tight"
+                  className="absolute bottom-full mb-2 whitespace-nowrap"
                   style={{
-                    fontFamily: "var(--font-display)",
-                    background: "var(--td-surface-container-highest)",
-                    color: "#fff",
-                    border: "1px solid rgba(255,255,255,0.1)",
+                    fontFamily: "var(--font-sans)",
+                    fontSize: "0.68rem",
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    background: "var(--bg-card)",
+                    color: "var(--eg-navy)",
+                    border: "1px solid var(--rule-soft)",
+                    borderRadius: "var(--r-btn)",
+                    padding: "0.35rem 0.6rem",
+                    boxShadow: "var(--shadow-panel)",
                   }}
                 >
-                  <span
-                    className="inline-block w-1.5 h-1.5 mr-1.5"
-                    style={{ background: "var(--td-secondary)" }}
-                  />
                   {terminal.city.toUpperCase()}
                 </div>
               )}
 
-              {/* Persistent Hamburg HUB label */}
+              {/* Persistent HAMBURG label for the active beacon */}
               {isActive && !isHovered && (
                 <div
-                  className="absolute bottom-full mb-2 whitespace-nowrap px-2.5 py-1 text-[10px] font-bold tracking-tight"
+                  className="absolute bottom-full mb-2 whitespace-nowrap"
                   style={{
-                    fontFamily: "var(--font-display)",
-                    background: "var(--td-surface-container-highest)",
-                    color: "#fff",
-                    border: "1px solid rgba(255,255,255,0.1)",
+                    fontFamily: "var(--font-sans)",
+                    fontSize: "0.68rem",
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    background: "var(--bg-card)",
+                    color: "var(--eg-navy)",
+                    border: "1px solid var(--rule-soft)",
+                    borderRadius: "var(--r-btn)",
+                    padding: "0.35rem 0.6rem",
+                    boxShadow: "var(--shadow-panel)",
                   }}
                 >
                   <span
-                    className="inline-block w-1.5 h-1.5 mr-1.5"
-                    style={{ background: "var(--td-secondary)" }}
+                    style={{
+                      display: "inline-block",
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: COLOR_ACTIVE,
+                      marginRight: "0.45rem",
+                      verticalAlign: "middle",
+                    }}
                   />
-                  HAMBURG HUB
+                  HAMBURG
                 </div>
               )}
             </div>
