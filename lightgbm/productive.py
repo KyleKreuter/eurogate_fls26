@@ -5,7 +5,7 @@ honest_blend.py als Inputs kombiniert werden:
 
     legal_rf_big_s1.csv
         RF mit lag_48h und lag_72h zusaetzlich zu den Baseline-Lags.
-        2000 Baeume, min_samples_leaf=6, max_features=0.5, seed=1.
+        3000 Baeume, min_samples_leaf=6, max_features=0.5, seed=1.
         Beste mae_peak (23.93) aller regelkonformen Einzelmodelle.
 
     legal_rf_s1.csv
@@ -301,7 +301,7 @@ def main() -> None:
 
     point, p90 = train_rf(
         X_train, y_train, X_target,
-        n_estimators=2000,
+        n_estimators=3000,
         min_samples_leaf=6,
         max_features=0.5,
         seed=1,

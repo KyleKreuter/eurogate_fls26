@@ -652,7 +652,7 @@ def main() -> None:
         X_train,
         y_train_level,
         X_pred,
-        n_estimators=500,
+        n_estimators=1500,
         max_features=0.6,
         min_samples_leaf=5,
         criterion="absolute_error",
@@ -665,7 +665,7 @@ def main() -> None:
         X_train,
         pd.Series(y_train_resid),
         X_pred,
-        n_estimators=500,
+        n_estimators=1500,
         max_features=0.6,
         min_samples_leaf=5,
         criterion="absolute_error",
@@ -691,7 +691,7 @@ def main() -> None:
     # --- Feature-Importance (Top-10) aus einem einzelnen RF (auf Residuen) ---
     print("[imp] Trainiere Hilfs-RF fuer Feature-Importance (squared_error, fast) ...")
     imp_rf = RandomForestRegressor(
-        n_estimators=400,
+        n_estimators=500,
         criterion="squared_error",
         max_depth=None,
         min_samples_leaf=5,
@@ -715,7 +715,7 @@ def main() -> None:
     # Residuen-Verteilung.
     print("[p90] Trainiere Kalibrierungs-RF fuer Residuen-Spread ...")
     calib_rf = RandomForestRegressor(
-        n_estimators=500,
+        n_estimators=1000,
         criterion="absolute_error",
         max_depth=None,
         min_samples_leaf=5,
