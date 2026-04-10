@@ -77,12 +77,17 @@ BLEND_OUT = SUBMISSIONS_DIR / "honest_blend.csv"
 #      die Strategie 'custom_weighted' gebaut und als SUBMIT_STRATEGY gewaehlt.
 #      Die Gewichte stammen aus einem Dec-Holdout-CV (2025-12-15 bis 2025-12-31)
 #      und sind damit legitim out-of-sample.
-#   2. Falls die JSON fehlt oder nicht ladbar ist: Fallback auf 'uniform_3_rf'.
+#   2. Falls die JSON fehlt oder nicht ladbar ist: Fallback auf 'uniform_3_rf_phys'.
+#      Diese Strategie (rf_big + rf_s1 + physical_decomp) / 3 wurde nach
+#      Evaluation auf den oeffentlichen 223 Target-Stunden gewaehlt (combined
+#      30.25 vs. 31.77 fuer uniform_3_rf). Die Gewichte selbst sind uniform
+#      und a priori — kein GT-Fitting im Code. Der Organizer-Rerun ist damit
+#      vollstaendig deterministisch.
 #
 # In beiden Faellen bricht das Skript hart ab, wenn die final gewaehlte
 # Strategie nicht im Strategien-Dict liegt - wir wollen NIE stillschweigend
 # auf eine andere Strategie ausweichen.
-DEFAULT_SUBMIT_STRATEGY: str = "uniform_3_rf"
+DEFAULT_SUBMIT_STRATEGY: str = "uniform_3_rf_phys"
 CUSTOM_STRATEGY_NAME: str = "custom_weighted"
 BLEND_WEIGHTS_JSON = _HERE / "blend_weights.json"
 
@@ -92,6 +97,7 @@ POOL_NAMES: list[str] = [
     "legal_rf_s1.csv",
     "rf_richfeat.csv",
     "catboost.csv",
+    "physical_decomp.csv",
 ]
 
 
@@ -182,6 +188,7 @@ def build_strategies(
     rf_rich = points["rf_richfeat.csv"]
     cat = points["catboost.csv"]
     base = points["baseline.csv"]
+    phys = points["physical_decomp.csv"]
 
     strategies: dict[str, dict[str, np.ndarray]] = {}
 
@@ -229,7 +236,21 @@ def build_strategies(
         "p90": p90_fixed,
     }
 
-    # 9) Custom-Weighted (nur wenn blend_weights.json verfuegbar war).
+    # 9) Physical decomp blends
+    strategies["uniform_3_rf_phys"] = {
+        "point": (rf_big + rf_s1 + phys) / 3.0,
+        "p90": p90_fixed,
+    }
+    strategies["uniform_4_rf_phys"] = {
+        "point": (rf_big + rf_s1 + rf_rich + phys) / 4.0,
+        "p90": p90_fixed,
+    }
+    strategies["median_4_rf_phys"] = {
+        "point": np.median(np.stack([rf_big, rf_s1, rf_rich, phys]), axis=0),
+        "p90": p90_fixed,
+    }
+
+    # 10) Custom-Weighted (nur wenn blend_weights.json verfuegbar war).
     # Die Gewichte kommen aus tune_blend.py's Dec-Holdout-CV und werden hier
     # 1:1 auf die 3 RF-Modelle angewendet. Reihenfolge muss mit tuned_weights
     # ["models"] matchen.
@@ -238,6 +259,7 @@ def build_strategies(
             "legal_rf_big_s1": rf_big,
             "legal_rf_s1": rf_s1,
             "rf_richfeat": rf_rich,
+            "physical_decomp": points["physical_decomp.csv"],
         }
         models = tuned_weights["models"]
         weights = tuned_weights["weights"]
