@@ -1,61 +1,72 @@
+import type { ReactNode } from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { formatDeltaPct, formatInt } from "@/lib/format";
 
 interface KpiCardProps {
   label: string;
+  /** Value already in target unit (e.g. kW) */
   value: number;
-  unit: string;
-  deltaPct: number;
-  icon: React.ReactNode;
-  accent: string;
+  unit?: string;
+  /** Ratio, not percent — pass `0.042` for +4.2%. Optional. */
+  deltaRatio?: number;
+  /** Optional "vs prev. year" style note next to the delta chip */
+  deltaLabel?: string;
+  icon: ReactNode;
 }
 
-export function KpiCard({ label, value, unit, deltaPct, icon, accent }: KpiCardProps) {
-  const isUp = deltaPct >= 0;
+/**
+ * Apple-style KPI card (large lucide icon top-left, no accent bar).
+ * Value renders in JetBrains Mono, label in Outfit uppercase, delta
+ * picks color from `--success`/`--danger` based on sign.
+ */
+export function KpiCard({
+  label,
+  value,
+  unit,
+  deltaRatio,
+  deltaLabel,
+  icon,
+}: KpiCardProps) {
+  const hasDelta = deltaRatio != null && !Number.isNaN(deltaRatio);
+  const isUp = (deltaRatio ?? 0) >= 0;
 
   return (
-    <div
-      className="kpi-card"
-      style={{ "--kpi-accent": accent, cursor: "default" } as React.CSSProperties}
-    >
-      <div className="relative z-10">
-        <div className="flex items-center justify-between mb-4">
-          <span
-            className="text-[10px] font-semibold tracking-[0.14em] uppercase"
-            style={{ color: "var(--text-muted)" }}
-          >
-            {label}
-          </span>
-          <div
-            className="flex items-center justify-center w-8 h-8 rounded-full"
-            style={{ background: `${accent}10`, color: accent }}
-          >
-            {icon}
-          </div>
-        </div>
-
-        <div className="flex items-baseline gap-2 mb-3">
-          <span className="data-value text-3xl font-bold leading-none" style={{ color: "var(--eg-navy)" }}>
-            {Math.round(value).toLocaleString("en-US")}
-          </span>
-          <span className="data-value text-sm font-medium" style={{ color: "var(--text-muted)" }}>
-            {unit}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div
-            className="inline-flex items-center gap-1 px-2 py-[3px] rounded-full text-[11px] font-medium"
-            style={{
-              background: isUp ? "var(--positive-bg)" : "var(--negative-bg)",
-              color: isUp ? "var(--positive)" : "var(--negative)",
-            }}
-          >
-            {isUp ? <TrendingUp size={11} strokeWidth={2.5} /> : <TrendingDown size={11} strokeWidth={2.5} />}
-            <span className="data-value">{isUp ? "+" : ""}{deltaPct.toFixed(1)}%</span>
-          </div>
-          <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>vs prev. year</span>
-        </div>
+    <div className="kpi-card">
+      <div className="kpi-card__icon">{icon}</div>
+      <div className="kpi-card__label">{label}</div>
+      <div className="kpi-card__value">
+        {formatInt(value)}
+        {unit && <span className="kpi-card__unit">{unit}</span>}
       </div>
+      {hasDelta && (
+        <div
+          className={`kpi-card__delta ${
+            isUp ? "kpi-card__delta--pos" : "kpi-card__delta--neg"
+          }`}
+        >
+          {isUp ? (
+            <TrendingUp size={14} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <TrendingDown size={14} strokeWidth={2} aria-hidden="true" />
+          )}
+          <span>{formatDeltaPct(deltaRatio)}</span>
+          {deltaLabel && (
+            <span
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "0.72rem",
+                fontWeight: 400,
+                color: "var(--ink-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                marginLeft: "0.5rem",
+              }}
+            >
+              {deltaLabel}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

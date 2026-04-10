@@ -1,60 +1,76 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { EurogateLogo } from "@/components/EurogateLogo";
+import { cn } from "@/lib/utils";
 
 interface NavigationProps {
-  /** When true, renders on a dark background with white logo */
-  variant?: "dark" | "light";
-  /** Show a back link to the terminals overview */
-  showBackLink?: boolean;
-  /** Text to display in the center of the nav bar */
-  centerLabel?: string;
+  /** Back arrow link target (e.g. `/` for the landing page) */
+  backTo?: string;
+  backLabel?: string;
+  /** Right-aligned breadcrumb / page name label */
+  centerLabel?: ReactNode;
+  className?: string;
 }
 
 /**
- * Shared navigation header for the Eurogate application.
- * On the locations page, uses the dark variant with a white logo.
- * On the dashboard page, uses the light variant with back link and center label.
+ * Sticky white app navbar — 80px, 1.1rem vertical padding, subtle
+ * shadow-header. Present on every page of the dashboard. Logo left,
+ * optional back link next to it, optional right-side breadcrumb.
  */
-export function Navigation({ variant = "dark", showBackLink = false, centerLabel }: NavigationProps) {
-  const isDark = variant === "dark";
-
+export function Navigation({
+  backTo,
+  backLabel = "BACK",
+  centerLabel,
+  className,
+}: NavigationProps) {
   return (
-    <header
-      className="w-full px-5 md:px-8 py-4 md:py-5 flex items-center justify-between"
-      style={{
-        background: isDark ? "transparent" : "var(--bg-white)",
-        borderBottom: isDark ? "none" : "1px solid var(--border-default)",
-      }}
-    >
-      <EurogateLogo
-        height={30}
-        className={isDark ? "brightness-0 invert" : ""}
-      />
+    <header className={cn("app-navbar", className)}>
+      <div className="flex items-center gap-6">
+        <Link to="/" className="inline-flex items-center" aria-label="Eurogate home">
+          <EurogateLogo height={30} />
+        </Link>
+        {backTo && (
+          <Link
+            to={backTo}
+            className="inline-flex items-center gap-2 transition-colors"
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: "var(--ink-secondary)",
+              textDecoration: "none",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.color =
+                "var(--eg-navy)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.color =
+                "var(--ink-secondary)";
+            }}
+          >
+            <ArrowLeft size={16} strokeWidth={2} />
+            {backLabel}
+          </Link>
+        )}
+      </div>
 
       {centerLabel && (
-        <span
-          className="hidden md:inline text-xs font-medium tracking-wide"
-          style={{ color: "var(--text-muted)" }}
+        <div
+          style={{
+            fontFamily: "var(--font-sans)",
+            fontSize: "0.82rem",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--eg-navy)",
+          }}
         >
           {centerLabel}
-        </span>
-      )}
-
-      {showBackLink ? (
-        <Link
-          to="/"
-          className="flex items-center gap-1.5 text-xs font-medium no-underline transition-colors duration-150"
-          style={{ color: "var(--text-secondary)" }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--eg-navy)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-secondary)"; }}
-        >
-          <ArrowLeft size={14} strokeWidth={2} />
-          <span className="hidden sm:inline">Terminals</span>
-        </Link>
-      ) : (
-        /* Keep the layout balanced when there's no back link */
-        <div />
+        </div>
       )}
     </header>
   );
