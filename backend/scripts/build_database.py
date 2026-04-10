@@ -3,11 +3,8 @@ import sqlite3
 import zipfile
 from pathlib import Path
 import os
-
-PUBLIC_DIR = Path('/Users/rkohlbach/Downloads/participant_package_lokal')
-REEFER_CSV_PATH = PUBLIC_DIR / 'reefer_release.csv'
-REEFER_ZIP_PATH = PUBLIC_DIR / 'reefer_release.zip'
-DB_PATH = PUBLIC_DIR / 'dashboard' / 'reefer.db'
+import argparse
+import sys
 
 # All columns from the source CSV
 ALL_COLS = [
@@ -27,19 +24,22 @@ ALL_COLS = [
     'stack_tier',
 ]
 
-def setup_database():
-    print(f"Creating SQL database at {DB_PATH}")
+def setup_database(source_csv: Path, output_db: Path):
+    print(f"Creating SQL database at {output_db}")
 
-    if DB_PATH.exists():
-        os.remove(DB_PATH)
+    output_db.parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(DB_PATH)
+    if output_db.exists():
+        os.remove(output_db)
+
+    conn = sqlite3.connect(output_db)
 
     print("Loading all columns from 3.7M row CSV...")
-    if REEFER_CSV_PATH.exists():
-        df = pd.read_csv(REEFER_CSV_PATH, sep=';', decimal=',', usecols=ALL_COLS)
+    if source_csv.exists():
+        df = pd.read_csv(source_csv, sep=';', decimal=',', usecols=ALL_COLS)
     else:
-        with zipfile.ZipFile(REEFER_ZIP_PATH) as zf:
+        zip_path = source_csv.with_suffix('.zip')
+        with zipfile.ZipFile(zip_path) as zf:
             with zf.open("reefer_release.csv") as raw:
                 df = pd.read_csv(raw, sep=';', decimal=',', usecols=ALL_COLS)
 
@@ -103,4 +103,49 @@ def setup_database():
     print("Done! Full-column database built with native visit UUIDs.")
 
 if __name__ == '__main__':
-    setup_database()
+    default_source_csv = (
+        Path(__file__).resolve().parents[2]
+        / "participant_package"
+        / "daten"
+        / "reefer_release.csv"
+    )
+    default_output_db = Path(__file__).resolve().parents[1] / "reefer.db"
+
+    parser = argparse.ArgumentParser(
+        description="Build the reefer SQLite database from raw telemetry CSV."
+    )
+    parser.add_argument(
+        "--source-csv",
+        type=Path,
+        default=Path(os.environ.get("REEFER_SOURCE_CSV", default_source_csv)),
+        help=(
+            "Path to the raw reefer_release.csv source file. "
+            "Overrides the REEFER_SOURCE_CSV environment variable. "
+            f"Default: {default_source_csv}"
+        ),
+    )
+    parser.add_argument(
+        "--output-db",
+        type=Path,
+        default=Path(os.environ.get("REEFER_DB_PATH", default_output_db)),
+        help=(
+            "Path where the SQLite reefer.db will be written. "
+            "Overrides the REEFER_DB_PATH environment variable. "
+            f"Default: {default_output_db}"
+        ),
+    )
+    args = parser.parse_args()
+
+    source_csv: Path = args.source_csv
+    output_db: Path = args.output_db
+
+    # Accept either the CSV directly or a sibling .zip as a fallback.
+    if not source_csv.exists() and not source_csv.with_suffix('.zip').exists():
+        print(
+            f"Source CSV not found at {source_csv}. "
+            "If using Git LFS, run 'git lfs pull' first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    setup_database(source_csv, output_db)
