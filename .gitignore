@@ -9,7 +9,11 @@ __pycache__/
 venv/
 
 # IDE
-.idea/
+# .idea/ is intentionally NOT ignored: PyCharm maintains its own
+# .idea/.gitignore which only excludes workspace.xml, shelf/ and
+# httpRequests/ (the per-user state). The shared team config
+# (modules.xml, misc.xml, vcs.xml, *.iml, inspectionProfiles/) is
+# safe to commit — all paths use $PROJECT_DIR$ / $MODULE_DIR$ macros.
 .vscode/
 
 # OS
