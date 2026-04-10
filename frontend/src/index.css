@@ -1,0 +1,227 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/raleway";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* ─── Eurogate Brand ─── */
+  --eg-blue: #004494;
+  --eg-blue-light: #1a6fd4;
+  --eg-red: #e2001a;
+  --eg-red-warm: #ff4e3a;
+  --eg-navy: #14003d;
+
+  /* ─── Page Background ─── */
+  --bg-page: #f5f5f7;
+  --bg-white: #ffffff;
+  --bg-subtle: #ececec;
+
+  /* ─── Semantic ─── */
+  --positive: #059669;
+  --positive-bg: rgba(5, 150, 105, 0.08);
+  --negative: #dc2626;
+  --negative-bg: rgba(220, 38, 38, 0.07);
+
+  /* ─── Text ─── */
+  --text-primary: #222222;
+  --text-secondary: #555566;
+  --text-muted: #888899;
+  --text-nav: #14003d;
+
+  /* ─── Borders ─── */
+  --border-default: #dadada;
+  --border-subtle: #ececec;
+
+  /* ─── Chart — Eurogate colors ─── */
+  --chart-forecast: #004494;
+  --chart-p90-fill: rgba(226, 0, 26, 0.08);
+  --chart-p90-stroke: rgba(226, 0, 26, 0.4);
+  --chart-history: #222222;
+  --chart-grid: rgba(0, 0, 0, 0.06);
+
+  /* ─── Typography ─── */
+  --font-display: "Raleway Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+
+@layer base {
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body { min-height: 100vh; overflow-x: hidden; }
+
+  #root { position: relative; z-index: 1; }
+}
+
+/* ─── Card Panel ─── */
+
+.glass-panel,
+.card-panel {
+  background: var(--bg-white);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  position: relative;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* ─── KPI Card ─── */
+
+.kpi-card {
+  position: relative;
+  border-radius: 16px;
+  padding: 22px 24px;
+  overflow: hidden;
+  cursor: default;
+  transition: box-shadow 200ms ease;
+  background: var(--bg-white);
+  border: 1px solid var(--border-default);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.kpi-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+/* Colored left accent bar */
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  top: 14px; bottom: 14px; left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--kpi-accent);
+}
+
+/* ─── Glow Divider ─── */
+
+.glow-divider {
+  height: 1px;
+  background: var(--border-default);
+}
+
+/* ─── Day Pill ─── */
+
+.day-pill {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-white);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+  user-select: none;
+}
+
+.day-pill:hover {
+  border-color: var(--eg-navy);
+  color: var(--text-primary);
+}
+
+.day-pill[data-active="true"] {
+  background: var(--eg-navy);
+  border-color: var(--eg-navy);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* ─── Data mono type ─── */
+
+.data-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+/* ─── Focus states ─── */
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--eg-blue);
+  outline-offset: 2px;
+}
+
+/* ─── Recharts ─── */
+
+.recharts-cartesian-grid line { stroke: var(--chart-grid) !important; }
+.recharts-text { font-family: var(--font-mono) !important; font-size: 10px !important; fill: var(--text-muted) !important; }
+.recharts-tooltip-wrapper { outline: none !important; }
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c0bdd0; border-radius: 3px; }
+
+/* ─── Terminals Dark Theme (scoped) ─── */
+
+.terminals-dark {
+  --td-surface: #131318;
+  --td-surface-dim: #0e0e13;
+  --td-surface-container: #1f1f25;
+  --td-surface-container-low: #1b1b20;
+  --td-surface-container-high: #2a292f;
+  --td-surface-container-highest: #35343a;
+  --td-on-surface: #e4e1e9;
+  --td-on-surface-variant: #cac4d0;
+  --td-primary: #cfbcff;
+  --td-secondary: #ffb4a8;
+  --td-outline: #948f9a;
+  --td-outline-variant: #49454f;
+}
+
+.industrial-grid {
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ─── Mapbox GL overrides ─── */
+
+.mapboxgl-ctrl-attrib,
+.mapboxgl-ctrl-logo {
+  display: none !important;
+}
+
+.mapboxgl-canvas {
+  outline: none;
+}
+
+/* ─── Terminal marker pulse ─── */
+
+@keyframes markerPulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+.marker-pulse {
+  animation: markerPulse 1.8s ease-out infinite;
+}
+
+/* ─── Page enter animation ─── */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: fadeIn 300ms ease-out;
+}
+
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .kpi-card { transition: none; }
+  .page-enter { animation: none; }
+}
