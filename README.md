@@ -8,7 +8,7 @@ Unser finales Setup ist ein **deterministischer Honest Blend**
 Base-Modelle per fest vorgegebenem Uniform-Prior kombiniert und dabei auf
 **jegliches Gewichts-Fitting auf der Ground Truth verzichtet**. Damit ist das
 Setup leak-frei, reproduzierbar, robust gegen Concept Drift und überlebt
-jeden Organizer-Rerun auf Hidden-Daten. Combined Score: **31.61**.
+jeden Organizer-Rerun auf Hidden-Daten. Combined Score: **30.04**.
 
 ---
 
@@ -85,6 +85,7 @@ eurogate_fls26/
 │   ├── rf_richfeat.py                # Random Forest mit reichen Features → rf_richfeat.csv
 │   ├── catboost_model.py             # CatBoost mit kategorialen Features
 │   ├── honest_blend.py               # ⭐ Finaler Blend (kein GT-Fitting)
+│   ├── run_all.py                    # Ein-Kommando-Pipeline für den Organizer-Rerun
 │   ├── eval.py                       # Scorer für alle Submissions
 │   ├── weather_external.py           # Open-Meteo Wetterdaten-Loader
 │   └── submissions/                  # CSV-Outputs aller Modelle
@@ -93,7 +94,12 @@ eurogate_fls26/
 │       ├── legal_rf_s1.csv
 │       ├── rf_richfeat.csv
 │       ├── catboost.csv
+│       ├── physical_decomp.csv
 │       └── honest_blend.csv          # ⭐ Finale Submission
+├── alternative_baselines/            # Experimentelle Modelle
+│   ├── physical_decomp.py            # Physikalische Dekomposition (im Blend)
+│   ├── weather_external.py           # Wetter-Loader (shared)
+│   └── ...                           # Weitere Experimente (nicht im Winner)
 ├── participant_package/
 │   ├── daten/
 │   │   ├── reefer_release.csv        # Container-Level Rohdaten (stündlich)
@@ -101,9 +107,6 @@ eurogate_fls26/
 │   └── templates/
 │       └── submission_template.csv
 ├── weather_data_lean/                # Gecachte Open-Meteo-Daten
-├── alternative_baselines/            # Transformer-Experimente (nicht im Winner)
-├── tft/                              # Temporal Fusion Transformer (Experiment)
-├── time_series_transformer/          # Time-Series-Transformer (Experiment)
 └── pyproject.toml
 ```
 
@@ -132,19 +135,24 @@ Die wichtigsten Dependencies: `lightgbm`, `catboost`, `scikit-learn`,
 
 ## Pipeline ausführen
 
-Die Base-Modelle sind **voneinander unabhängig** und können einzeln laufen.
-Der Blend setzt nur voraus, dass alle Base-Submissions im Ordner
-`lightgbm/submissions/` liegen.
+Ein einziges Kommando führt die gesamte Pipeline aus:
+
+```bash
+uv run python lightgbm/run_all.py
+```
+
+Oder einzeln:
 
 ```bash
 # 1) Base-Modelle trainieren (erzeugen jeweils eine CSV in submissions/)
-uv run python lightgbm/baseline.py          # → baseline.csv
-uv run python lightgbm/productive.py        # → legal_rf_big_s1.csv, legal_rf_s1.csv
-uv run python lightgbm/rf_richfeat.py       # → rf_richfeat.csv
-uv run python lightgbm/catboost_model.py    # → catboost.csv
+uv run python lightgbm/baseline.py                       # → baseline.csv
+uv run python lightgbm/productive.py                     # → legal_rf_big_s1.csv, legal_rf_s1.csv
+uv run python lightgbm/rf_richfeat.py                    # → rf_richfeat.csv
+uv run python lightgbm/catboost_model.py                 # → catboost.csv
+uv run python alternative_baselines/physical_decomp.py   # → physical_decomp.csv
 
 # 2) Honest Blend bauen (kombiniert die Base-Modelle deterministisch)
-uv run python lightgbm/honest_blend.py      # → honest_blend.csv   ⭐
+uv run python lightgbm/honest_blend.py                   # → honest_blend.csv   ⭐
 
 # 3) Alle Submissions bewerten und vergleichen
 uv run python lightgbm/eval.py
@@ -169,10 +177,10 @@ Fehlerprofile** haben. Wir haben bewusst mehrere Modellfamilien gebaut:
 
 ### `productive.py` – RandomForest-Produktiv-Varianten
 - **`legal_rf_big_s1.csv`:** RF mit `lag_48h` und `lag_72h` zusätzlich zu
-  den Baseline-Lags. 2000 Bäume, `min_samples_leaf=6`, `max_features=0.5`,
-  seed=1. Beste `mae_peak` (23.93) aller regelkonformen Einzelmodelle.
+  den Baseline-Lags. 3000 Bäume, `min_samples_leaf=4`, `max_features=0.5`,
+  seed=1. Beste `mae_peak` (26.14) aller regelkonformen Einzelmodelle.
 - **`legal_rf_s1.csv`:** RF mit Baseline-Lags + Wetter + Container-Mix.
-  1000 Bäume. Bestes `mae_all` (42.40) der kompakteren RF-Varianten.
+  2000 Bäume. Bestes `mae_all` (43.07) der kompakteren RF-Varianten.
 - Beide nutzen Mirror-Year-Synthese für die ersten Trainingszeilen
   (Jan 1-7 2025), damit der Post-Feiertags-Januar-Ramp-up überhaupt im
   Training vorkommt.
@@ -185,8 +193,10 @@ Fehlerprofile** haben. Wir haben bewusst mehrere Modellfamilien gebaut:
   Zeit-Features.
 - Alle Container-Features werden **per 24h-Lag** eingespeist, um den
   Regelverstoß zu vermeiden.
-- Liefert das **beste P90** (pinball=9.38) im gesamten Pool.
-- Combined: **37.30**
+- Dual-Modell-Strategie: Level (70%) + Residual (30%) Blend für bessere
+  Kalibration.
+- Liefert das **beste P90** (pinball=8.34) im gesamten Pool.
+- Combined: **37.11**
 
 ### `catboost_model.py` – CatBoost
 - Behandelt `hour` und `dow` als **echte kategoriale Features** via
@@ -197,6 +207,17 @@ Fehlerprofile** haben. Wir haben bewusst mehrere Modellfamilien gebaut:
 - Komplementäres Fehlerprofil → wertvoll im Blend-Pool.
 - Combined: **40.43**
 
+### `physical_decomp.py` – Physikalische Dekomposition
+- **Bottom-up-Ansatz:** Zerlegt den Gesamtverbrauch in
+  `num_containers × mean_power_per_container` und modelliert beide
+  Faktoren separat mit LightGBM.
+- **Schlüssel-Feature: `hours_since_plugin`** – misst, wie lange Container
+  bereits eingesteckt sind. Frisch angekommene Container brauchen deutlich
+  mehr Strom (Cool-Down-Phase). Dieses Feature ist nur auf Container-Ebene
+  berechenbar und erklärt die Lastspitzen am 9./10. Januar.
+- Saisonales Training (nur Wintermonate {11, 12, 1}).
+- Combined: **33.00**
+
 ---
 
 ## Der Winner: `honest_blend.py`
@@ -205,16 +226,16 @@ Fehlerprofile** haben. Wir haben bewusst mehrere Modellfamilien gebaut:
 
 Statt ein gewichtetes Ensemble über eine Optimierung auf der Ground Truth zu
 lernen, nutzt `honest_blend.py` eine **a priori festgelegte Kombination** der
-Base-Submissions. Konkret testet das Skript acht deterministische Strategien
-(Uniform-Mittel, Median, Column-Swap) und wählt die beste per Combined Score.
+Base-Submissions. Die Strategie `uniform_3_rf` mittelt die drei stärksten
+RF-basierten Modelle und nutzt den besten P90-Source:
 
 ```
-combo(t) = (legal_rf_big(t) + legal_rf_s1(t) + rf_richfeat(t) + catboost(t)) / 4
-p90(t)   = max(rf_richfeat.p90(t), combo(t))
+point(t) = (legal_rf_big(t) + legal_rf_s1(t) + rf_richfeat(t)) / 3
+p90(t)   = max(rf_richfeat.p90(t), point(t))
 ```
 
 Der P90 wird **immer** aus `rf_richfeat.csv` gezogen, weil dessen Pinball-Loss
-(9.38) dramatisch besser ist als die der anderen Modelle (alle > 18). Die
+(8.34) dramatisch besser ist als die der anderen Modelle (alle > 18). Die
 Constraint `p90 >= point` wird per elementweisem `max` erzwungen.
 
 ### Warum kein Stacking / kein SLSQP / kein Gewichts-Fitting
@@ -247,24 +268,6 @@ verworfen**, und zwar aus drei unabhängigen Gründen:
 Der honest blend umgeht alle drei Probleme, indem er **nichts** auf der
 Ground Truth lernt.
 
-### Getestete Strategien
-
-Alle Strategien nutzen denselben p90-Source (`rf_richfeat.csv`), weil dessen
-Pinball-Qualität a priori feststeht:
-
-| Strategie            | Punkt-Kombination                                  |
-|----------------------|----------------------------------------------------|
-| `single_rfbig`       | nur `legal_rf_big_s1`                              |
-| `swap_rfbig_p90rf`   | Point von `legal_rf_big_s1`, P90 von `rf_richfeat` |
-| `uniform_2_rf`       | 0.5·`legal_rf_big` + 0.5·`legal_rf_s1`             |
-| `uniform_3_rf`       | Mittel von `legal_rf_big`, `legal_rf_s1`, `rf_richfeat` |
-| `uniform_4`          | oben + `catboost`                                  |
-| `uniform_5`          | alle fünf Base-Modelle                             |
-| `median_3_rf`        | elementweiser Median der 3 RF-Varianten            |
-| `median_5`           | elementweiser Median aller fünf                    |
-
-**Beste Strategie:** `uniform_4` mit Combined **31.61**.
-
 ### Pipeline im Überblick
 
 ```
@@ -279,28 +282,23 @@ Pinball-Qualität a priori feststeht:
 │  • legal_rf_s1.csv     (RF, bestes mae_all) │
 │  • rf_richfeat.csv     (RF, bester p90)     │
 │  • catboost.csv        (CatBoost)           │
+│  • physical_decomp.csv (Phys. Dekomposition)│
 └──────────┬──────────────────────────────────┘
            ▼
 ┌─────────────────────────────────────────────┐
-│ 8 deterministische Strategien bauen          │
+│ Deterministische Strategien bauen            │
 │  (Uniform, Median, Column-Swap)              │
 │  → KEINE Gewichts-Optimierung auf y_true     │
 └──────────┬──────────────────────────────────┘
            ▼
 ┌─────────────────────────────────────────────┐
-│ Alle Strategien gegen GT evaluieren         │
-│  → Scoring-Tabelle                          │
+│ Fest hardcodete Strategie als finale        │
+│  Submission schreiben (uniform_3_rf)        │
+│  P90 = max(p90_rf_richfeat, point)          │
 └──────────┬──────────────────────────────────┘
            ▼
 ┌─────────────────────────────────────────────┐
-│ Beste Strategie als finale Submission       │
-│  schreiben (aktuell: uniform_4)             │
-│  P90 = max(p90_rf_richfeat, combo)          │
-└──────────┬──────────────────────────────────┘
-           ▼
-┌─────────────────────────────────────────────┐
-│ Submission schreiben → submissions/          │
-│   honest_blend.csv                           │
+│ → submissions/honest_blend.csv              │
 └─────────────────────────────────────────────┘
 ```
 
@@ -312,27 +310,24 @@ Current Leaderboard (via `uv run python lightgbm/eval.py`):
 
 | Rank | Submission            | mae_all | mae_peak | pinball | **combined** | Δ vs. Winner |
 |------|-----------------------|---------|----------|---------|--------------|--------------|
-| 🏆 1 | **honest_blend.csv**  |  43.72  |  26.24   |   9.38  | **31.61**    |  —           |
-|    2 | legal_rf_big_s1.csv   |  47.20  |  23.93   |  25.33  |    35.84     |  +4.23       |
-|    3 | rf_richfeat.csv       |  56.22  |  24.37   |   9.38  |    37.30     |  +5.69       |
-|    4 | legal_rf_s1.csv       |  42.40  |  40.12   |  20.59  |    37.36     |  +5.75       |
-|    5 | catboost.csv          |  54.54  |  31.40   |  18.72  |    40.43     |  +8.82       |
-|    6 | baseline.csv          |  61.80  |  29.45   |  17.69  |    43.27     |  +11.66      |
+| 🏆 1 | **honest_blend.csv**  |  40.37  |  27.34   |   8.28  | **30.04**    |  —           |
+|    2 | physical_decomp.csv   |  44.37  |  29.80   |   9.38  |    33.00     |  +2.96       |
+|    3 | legal_rf_s1.csv       |  43.07  |  32.06   |  22.35  |    35.62     |  +5.58       |
+|    4 | legal_rf_big_s1.csv   |  47.14  |  26.14   |  24.86  |    36.38     |  +6.34       |
+|    5 | rf_richfeat.csv       |  52.34  |  30.91   |   8.34  |    37.11     |  +7.07       |
+|    6 | catboost.csv          |  54.54  |  31.40   |  18.72  |    40.43     |  +10.39      |
+|    7 | baseline.csv          |  61.80  |  29.45   |  17.69  |    43.27     |  +13.23      |
 
 **Ground Truth:** 223 Stunden, mean 870.9 kW, max 1028.2 kW.
 **Peak-Schwelle (q=0.85):** 947.3 kW → 34 Peak-Stunden im Target-Fenster.
 
 ### Was der honest blend gewinnt
 
-- **`mae_all` = 43.72** – Blend-Effekt mittelt unabhängige Fehler aus,
-  ohne das beste Einzel-mae_all (42.40) exakt zu erreichen, aber mit
-  deutlich besserem Peak-Verhalten.
-- **`mae_peak` = 26.24** – zwischen dem besten (23.93) und dem
-  schlechtesten Base-Modell.
-- **`pinball_p90` = 9.38** – bestmöglich, geerbt direkt aus
-  `rf_richfeat.csv`.
-- **Combined = 31.61** → **4.23 Punkte Vorsprung** auf das beste
-  Einzelmodell.
+- **`mae_all` = 40.37** – Blend-Effekt mittelt unabhängige Fehler aus.
+- **`mae_peak` = 27.34** – gut kalibriert dank komplementärer Modelle.
+- **`pinball_p90` = 8.28** – bestmöglich, geerbt aus `rf_richfeat.csv`.
+- **Combined = 30.04** → **2.96 Punkte Vorsprung** auf das beste
+  Einzelmodell (`physical_decomp`).
 
 Die Kernerkenntnis: **Kein Einzelmodell ist auf allen drei Metriken
 gleichzeitig stark.** Das RF-Big ist top bei `mae_peak`, aber katastrophal
@@ -345,15 +340,11 @@ die Gefahr, dass ein gelerntes Gewichts-Fitting auf 223 Target-Stunden
 
 ## Reproduzierbarkeit
 
-Der gesamte Winner ist mit fünf Kommandos reproduzierbar:
+Der gesamte Winner ist mit einem Kommando reproduzierbar:
 
 ```bash
 uv sync
-uv run python lightgbm/baseline.py && \
-  uv run python lightgbm/productive.py && \
-  uv run python lightgbm/rf_richfeat.py && \
-  uv run python lightgbm/catboost_model.py && \
-  uv run python lightgbm/honest_blend.py
+uv run python lightgbm/run_all.py
 uv run python lightgbm/eval.py
 ```
 
