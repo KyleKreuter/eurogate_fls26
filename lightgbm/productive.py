@@ -302,7 +302,7 @@ def main() -> None:
     point, p90 = train_rf(
         X_train, y_train, X_target,
         n_estimators=3000,
-        min_samples_leaf=6,
+        min_samples_leaf=4,
         max_features=0.5,
         seed=1,
         label="big_s1",
@@ -325,7 +325,7 @@ def main() -> None:
     point, p90 = train_rf(
         X_train, y_train, X_target,
         n_estimators=2000,
-        min_samples_leaf=6,
+        min_samples_leaf=4,
         max_features=0.5,
         seed=1,
         label="s1",

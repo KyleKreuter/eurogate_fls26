@@ -10,7 +10,8 @@ Schritte:
     2. productive.py        -> legal_rf_big_s1.csv, legal_rf_s1.csv
     3. rf_richfeat.py       -> rf_richfeat.csv
     4. catboost_model.py    -> catboost.csv
-    5. honest_blend.py      -> honest_blend.csv  (SUBMIT_STRATEGY=uniform_3_rf)
+    5. physical_decomp.py   -> physical_decomp.csv
+    6. honest_blend.py      -> honest_blend.csv  (SUBMIT_STRATEGY=uniform_3_rf)
 
 Leakage-Schutz (wichtig fuer den Organizer-Rerun):
     - Alle Base-Scripts respektieren HARD_CUTOFF_TS aus baseline.py
@@ -65,6 +66,11 @@ PIPELINE_STEPS: list[tuple[str, Path, list[str]]] = [
         "catboost_model",
         _HERE / "catboost_model.py",
         ["catboost.csv"],
+    ),
+    (
+        "physical_decomp",
+        _PROJECT_ROOT / "alternative_baselines" / "physical_decomp.py",
+        ["physical_decomp.csv"],
     ),
     (
         "honest_blend",
