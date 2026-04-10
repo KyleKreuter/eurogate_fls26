@@ -260,7 +260,10 @@ def main() -> None:
     target_feat = targets[["ts"]].merge(feat, on="ts", how="left")
     missing = int(target_feat[FEATURES].isna().any(axis=1).sum())
     if missing:
-        print(f"[cat] WARN: {missing} Target-Stunden ohne Feature-Match")
+        print(f"[cat] WARN: {missing} Target-Stunden ohne Feature-Match, fuelle auf")
+        target_feat[FEATURES] = (
+            target_feat[FEATURES].ffill().bfill().fillna(0.0)
+        )
     for col in CAT_FEATURES:
         target_feat[col] = target_feat[col].astype("int32")
 

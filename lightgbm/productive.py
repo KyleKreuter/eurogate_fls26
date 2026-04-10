@@ -200,6 +200,17 @@ def build_features(extra_lags: list[int] | None = None):
 
     train_df = feat.loc[feat["ts"] < target_start].copy()
     target_feat = targets[["ts"]].merge(feat, on="ts", how="left")
+
+    # NaN-Behandlung fuer Target-Features: Mirror-Synthese deckt evtl. nicht
+    # alle Target-Stunden ab (z.B. bei erweitertem Target-Fenster bis Ende Jan).
+    # ffill + bfill + 0-Fallback analog zu rf_richfeat.py.
+    missing = int(target_feat[base_features].isna().any(axis=1).sum())
+    if missing:
+        print(f"[feat] WARN: {missing} Target-Zeilen mit NaN-Features, fuelle auf")
+        target_feat[base_features] = (
+            target_feat[base_features].ffill().bfill().fillna(0.0)
+        )
+
     print(f"[feat] {len(train_df)} Trainings-Zeilen, {len(base_features)} Features")
     return train_df, target_feat, base_features
 

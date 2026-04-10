@@ -609,7 +609,10 @@ def run_training_and_submission(
     target_feat = targets[["ts"]].merge(feat, on="ts", how="left")
     missing = int(target_feat[feat_list].isna().any(axis=1).sum())
     if missing:
-        print(f"[{label}] WARN: {missing} Target-Stunden ohne Feature-Match")
+        print(f"[{label}] WARN: {missing} Target-Stunden ohne Feature-Match, fuelle auf")
+        target_feat[feat_list] = (
+            target_feat[feat_list].ffill().bfill().fillna(0.0)
+        )
 
     pred_point = m_point.predict(target_feat[feat_list])
     pred_p90 = m_p90.predict(target_feat[feat_list])
