@@ -1,0 +1,599 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/outfit";
+@import "@fontsource-variable/jetbrains-mono";
+
+/* ============================================================================
+   Eurogate FLS26 — Design tokens
+   1:1 port of the Python dashboard (backend/legacy/styles.css) visual language.
+   Single light theme across the entire app (Landing + Dashboard).
+   ============================================================================ */
+
+:root {
+  /* ── Brand ─────────────────────────────────────────────────────────────── */
+  --eg-navy:        #0b0222;           /* headers, rank-bar, tab active, primary titles */
+  --eg-navy-raised: #140a2a;           /* barely-lifted surface when needed */
+  --eg-navy-soft:   rgba(11, 2, 34, 0.08);
+
+  /* ── Accent ────────────────────────────────────────────────────────────── */
+  --accent-primary:        #2980B9;    /* chart forecast, links, CTA, active states */
+  --accent-primary-hover:  #2471A3;
+  --accent-primary-soft:   rgba(41, 128, 185, 0.08);
+  --accent-primary-strong: rgba(41, 128, 185, 0.18);
+
+  /* ── Semantic ──────────────────────────────────────────────────────────── */
+  --danger:      #C0392B;               /* P90, warnings, errors */
+  --danger-soft: rgba(192, 57, 43, 0.08);
+  --success:     #27AE60;               /* positive delta, calendar high */
+  --warning:     #E67E22;               /* Hamburg marker beacon, setpoint warm */
+  --neutral:     #95A5A6;               /* history line, muted number */
+
+  /* ── Surface (light, single theme) ────────────────────────────────────── */
+  --bg-page:   #F4F7F6;
+  --bg-card:   #FFFFFF;
+  --bg-subtle: #F1F5F9;                 /* toggle track, table hover */
+  --bg-soft:   #F8FAFC;                 /* row hover, sticky thead bg */
+
+  /* ── Ink ───────────────────────────────────────────────────────────────── */
+  --ink-primary:   #2C3E50;
+  --ink-secondary: #7F8C8D;
+  --ink-muted:     #95A5A6;
+  --ink-inverse:   #F4F7F6;             /* text on dark surfaces */
+
+  /* ── Lines ─────────────────────────────────────────────────────────────── */
+  --rule-soft:   #E2E8F0;
+  --rule-strong: #CBD5E1;
+
+  /* ── Data palette (ordinal, 8 steps) ──────────────────────────────────── */
+  --data-0: #2980B9;  --data-1: #27AE60;  --data-2: #8E44AD;  --data-3: #E67E22;
+  --data-4: #E74C3C;  --data-5: #1ABC9C;  --data-6: #F39C12;  --data-7: #D35400;
+
+  /* ── Heatmap ramp (4-bucket quantile) ─────────────────────────────────── */
+  --heat-empty: #F1F5F9;
+  --heat-low:   #D6EAF8;
+  --heat-mid:   #5DADE2;
+  --heat-high:  #1A5490;
+
+  /* ── Typography ────────────────────────────────────────────────────────── */
+  --font-sans: "Outfit Variable", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ── Radius ────────────────────────────────────────────────────────────── */
+  --r-panel: 8px;                       /* glass-panel, kpi-card, table */
+  --r-pill:  6px;                       /* toggle-group container */
+  --r-btn:   4px;                       /* button inside toggle-group */
+  --r-chip:  999px;
+
+  /* ── Shadow (stacked-paper feel) ──────────────────────────────────────── */
+  --shadow-panel:  0 4px 12px rgba(11, 2, 34, 0.03);
+  --shadow-raised: 0 8px 24px rgba(11, 2, 34, 0.06);
+  --shadow-header: 0 2px 8px  rgba(11, 2, 34, 0.05);
+
+  /* ── Motion ────────────────────────────────────────────────────────────── */
+  --ease-out:  cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-snap: cubic-bezier(0.34, 1.26, 0.64, 1);
+  --dur-fast:  120ms;
+  --dur-base:  220ms;
+  --dur-slow:  400ms;
+
+  /* shadcn/ui button helpers need a --radius-md hook */
+  --radius-md: var(--r-panel);
+}
+
+/* ============================================================================
+   Base reset + body
+   ============================================================================ */
+
+@layer base {
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    background: var(--bg-page);
+    color: var(--ink-primary);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-height: 100vh;
+    overflow-x: hidden;
+    background: var(--bg-page);
+    color: var(--ink-primary);
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Outfit defaults to tabular figures off; leave prose alone but ensure
+     numbers in headings feel data-y. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    color: var(--ink-primary);
+  }
+
+  button {
+    font-family: inherit;
+  }
+}
+
+/* ============================================================================
+   Monospace helper — every number, timestamp, UUID, KPI value
+   ============================================================================ */
+
+.mono,
+[data-variant="mono"] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "ss01", "zero";
+}
+
+/* ============================================================================
+   Glass panel — the canonical card wrapper
+   ============================================================================ */
+
+.glass-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-panel);
+  padding: 2.5rem;
+  box-shadow: var(--shadow-panel);
+  position: relative;
+}
+
+.glass-panel--flush {
+  padding: 0;
+}
+
+.glass-panel--tight {
+  padding: 1.5rem;
+}
+
+/* ============================================================================
+   Page header — h1 + uppercase subtitle + 3px rank-bar signature
+   ============================================================================ */
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header__h1 {
+  font: 600 2.2rem/1.15 var(--font-sans);
+  letter-spacing: -0.02em;
+  color: var(--ink-primary);
+}
+
+.page-header__subtitle {
+  margin-top: 0.35rem;
+  font: 500 0.95rem/1.2 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-primary);
+}
+
+.rank-bar {
+  display: block;
+  width: 48px;
+  height: 3px;
+  background: var(--eg-navy);
+  margin: 0.8rem 0 0;
+}
+
+/* ============================================================================
+   Primary tabs — underline with ease-snap slide
+   ============================================================================ */
+
+.primary-tabs {
+  display: flex;
+  gap: 2rem;
+  border-bottom: 1px solid var(--rule-soft);
+  margin-bottom: 2.5rem;
+}
+
+.tab-nav-btn {
+  position: relative;
+  padding: 1.2rem 0.25rem;
+  background: transparent;
+  border: 0;
+  font: 600 0.92rem/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: color var(--dur-base) var(--ease-out);
+}
+
+.tab-nav-btn::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px 0;
+  height: 3px;
+  background: var(--eg-navy);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--dur-base) var(--ease-snap);
+}
+
+.tab-nav-btn:hover,
+.tab-nav-btn[data-active="true"] {
+  color: var(--eg-navy);
+}
+
+.tab-nav-btn[data-active="true"]::after {
+  transform: scaleX(1);
+}
+
+/* ============================================================================
+   Toggle group — segmented control (24h/14d, Hourly/Daily)
+   ============================================================================ */
+
+.toggle-group {
+  display: inline-flex;
+  background: var(--bg-subtle);
+  padding: 0.25rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--rule-soft);
+  gap: 0;
+}
+
+.toggle-btn {
+  padding: 0.55rem 1.1rem;
+  background: transparent;
+  border: 1px solid transparent;
+  font: 600 0.78rem/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-secondary);
+  border-radius: var(--r-btn);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+}
+
+.toggle-btn:hover {
+  color: var(--eg-navy);
+}
+
+.toggle-btn[data-active="true"] {
+  background: var(--bg-card);
+  color: var(--accent-primary);
+  border-color: var(--rule-soft);
+  box-shadow: 0 1px 2px rgba(11, 2, 34, 0.05);
+}
+
+/* ============================================================================
+   Stat pill — label + value chip (Container Inspector stats banner)
+   ============================================================================ */
+
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.9rem 1.2rem;
+  min-width: 140px;
+  background: var(--bg-page);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-panel);
+}
+
+.stat-pill__label {
+  font: 600 0.72rem/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-secondary);
+}
+
+.stat-pill__value {
+  font: 600 1.15rem/1 var(--font-mono);
+  color: var(--ink-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-pill--highlight {
+  background: var(--accent-primary-soft);
+  border-color: var(--accent-primary);
+}
+
+.stat-pill--highlight .stat-pill__value {
+  color: var(--accent-primary);
+}
+
+/* ============================================================================
+   Premium table — dense data table (Container Inspector)
+   ============================================================================ */
+
+.premium-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.premium-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-soft);
+}
+
+.premium-table th {
+  padding: 1rem 1rem;
+  font: 600 0.72rem/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-secondary);
+  text-align: left;
+  border-bottom: 2px solid var(--rule-soft);
+  white-space: nowrap;
+}
+
+.premium-table th[data-sortable="true"] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.premium-table th[data-sortable="true"]:hover {
+  color: var(--eg-navy);
+}
+
+.premium-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--rule-soft);
+  font: 400 0.88rem/1.3 var(--font-sans);
+  color: var(--ink-primary);
+}
+
+.premium-table td.mono,
+.premium-table td[data-variant="mono"] {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.premium-table tbody tr {
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.premium-table tbody tr:hover {
+  background: var(--bg-soft);
+}
+
+.premium-table tbody tr[data-selected="true"] {
+  background: var(--accent-primary-soft);
+  box-shadow: inset 3px 0 0 0 var(--accent-primary);
+}
+
+.premium-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ============================================================================
+   KPI card — Apple-style (large lucide icon, no accent bar)
+   ============================================================================ */
+
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-panel);
+  padding: 1.75rem 1.5rem;
+  box-shadow: var(--shadow-panel);
+  transition: box-shadow var(--dur-base) var(--ease-out),
+              transform var(--dur-base) var(--ease-out);
+}
+
+.kpi-card:hover {
+  box-shadow: var(--shadow-raised);
+}
+
+.kpi-card__icon {
+  display: inline-flex;
+  color: var(--accent-primary);
+  margin-bottom: 0.9rem;
+}
+
+.kpi-card__label {
+  font: 600 0.72rem/1.2 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-secondary);
+  margin-bottom: 0.55rem;
+}
+
+.kpi-card__value {
+  font: 600 2.4rem/1 var(--font-mono);
+  color: var(--ink-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.kpi-card__unit {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--ink-secondary);
+  margin-left: 0.35rem;
+  letter-spacing: 0;
+}
+
+.kpi-card__delta {
+  margin-top: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: 500 0.82rem/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-card__delta--pos { color: var(--success); }
+.kpi-card__delta--neg { color: var(--danger); }
+
+/* ============================================================================
+   App navbar — sticky white, 80px
+   ============================================================================ */
+
+.app-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--rule-soft);
+  box-shadow: var(--shadow-header);
+  padding: 1.1rem 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 80px;
+}
+
+/* ============================================================================
+   Focus — keyboard-only accent ring
+   ============================================================================ */
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ============================================================================
+   Scrollbar — thin neutral
+   ============================================================================ */
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
+
+/* ============================================================================
+   Recharts overrides — consistent theme across all charts
+   ============================================================================ */
+
+.recharts-cartesian-grid line {
+  stroke: var(--rule-soft) !important;
+  stroke-dasharray: 2 4 !important;
+}
+
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line {
+  stroke: var(--rule-soft) !important;
+}
+
+.recharts-text {
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  fill: var(--ink-secondary) !important;
+}
+
+.recharts-legend-item-text {
+  font-family: var(--font-sans) !important;
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-secondary) !important;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+.recharts-default-tooltip {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--eg-navy) !important;
+  border-radius: var(--r-panel) !important;
+  box-shadow: var(--shadow-raised) !important;
+  padding: 0.75rem 1rem !important;
+  font-family: var(--font-mono) !important;
+  font-size: 0.8rem !important;
+}
+
+.recharts-default-tooltip .recharts-tooltip-label {
+  font-family: var(--font-sans) !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--ink-secondary) !important;
+  margin-bottom: 0.35rem !important;
+}
+
+/* ============================================================================
+   Mapbox overrides — hide chrome, silence outline
+   ============================================================================ */
+
+.mapboxgl-ctrl-attrib,
+.mapboxgl-ctrl-logo {
+  display: none !important;
+}
+
+.mapboxgl-canvas {
+  outline: none;
+}
+
+/* Terminal marker pulse (Hamburg beacon) */
+@keyframes markerPulse {
+  0%   { transform: scale(1);   opacity: 0.55; }
+  100% { transform: scale(2.5); opacity: 0;    }
+}
+
+.marker-pulse {
+  animation: markerPulse 1.8s var(--ease-out) infinite;
+}
+
+/* ============================================================================
+   Page enter — staggered lift-in for dashboard content
+   ============================================================================ */
+
+@keyframes lift-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+.page-enter > * {
+  opacity: 0;
+  animation: lift-in var(--dur-slow) var(--ease-out) forwards;
+}
+
+.page-enter > *:nth-child(1) { animation-delay: 0ms;   }
+.page-enter > *:nth-child(2) { animation-delay: 80ms;  }
+.page-enter > *:nth-child(3) { animation-delay: 140ms; }
+.page-enter > *:nth-child(4) { animation-delay: 200ms; }
+.page-enter > *:nth-child(5) { animation-delay: 260ms; }
+.page-enter > *:nth-child(6) { animation-delay: 320ms; }
+
+/* ============================================================================
+   Reduced motion — respect OS preference
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-card,
+  .tab-nav-btn,
+  .toggle-btn,
+  .premium-table tbody tr {
+    transition: none !important;
+  }
+  .tab-nav-btn::after {
+    transition: none !important;
+  }
+  .page-enter > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .marker-pulse {
+    animation: none !important;
+  }
+}
