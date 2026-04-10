@@ -87,7 +87,7 @@ BLEND_OUT = SUBMISSIONS_DIR / "honest_blend.csv"
 # In beiden Faellen bricht das Skript hart ab, wenn die final gewaehlte
 # Strategie nicht im Strategien-Dict liegt - wir wollen NIE stillschweigend
 # auf eine andere Strategie ausweichen.
-DEFAULT_SUBMIT_STRATEGY: str = "uniform_3_rf_phys"
+DEFAULT_SUBMIT_STRATEGY: str = "uniform_4_rf_phys"
 CUSTOM_STRATEGY_NAME: str = "custom_weighted"
 BLEND_WEIGHTS_JSON = _HERE / "blend_weights.json"
 
