@@ -1,49 +1,84 @@
 """Physical bottom-up decomposition for the Reefer Peak Load Challenge.
 
+Motivation
+----------
+All other models in this repo (baseline, catboost, rf_richfeat) operate on
+pre-aggregated hourly totals: they see only the combined power draw of all
+plugged-in containers at each hour, never the individual container records.
+This approach instead reads the raw container-level CSV and decomposes total
+power into two physically interpretable factors before aggregating:
+
     total_power(t) = num_active_containers(t) × mean_power_per_container(t)
 
-Key physical insight — hours_since_plugin:
-    A freshly-arrived container must cool its cargo from ambient temperature
-    down to the setpoint.  This can take 6-24 h and requires significantly
-    more compressor work than the steady-state maintenance phase.
-    Terminal power spikes (Jan 9-10) likely coincide with ships unloading
-    many containers simultaneously — all starting their cool-down at once.
+Predicting each factor separately with its own model lets us bring in signals
+that are invisible at the aggregate level — most importantly, the fleet's
+collective plugin age (see below).
 
-    mean_hours_since_plugin captures the fleet's collective "age": a young
-    fleet (lots of new arrivals) draws more power per unit than an old one.
-    This is the feature that existing models (baseline, catboost, rf_richfeat)
-    cannot access because they only see hourly totals.
+Key physical insight — hours_since_plugin
+-----------------------------------------
+A freshly-arrived reefer container must pull its cargo from near-ambient
+temperature down to its setpoint (e.g. -25 °C for deep-frozen goods). This
+initial cool-down phase lasts roughly 6–24 h and demands significantly more
+compressor work than steady-state maintenance. When many containers arrive
+simultaneously — as happens when a large vessel unloads — the terminal sees a
+sharp power spike driven by concurrent cool-down, not by a sudden increase in
+the number of connected units.
 
-Two LightGBM sub-models:
+hours_since_plugin is computed per container visit as the elapsed time since
+the first observation of that visit in the raw data. Aggregated to the hourly
+level, mean_hours_since_plugin captures the fleet's collective "age":
+  - A young fleet (recent mass arrival) → high per-unit draw.
+  - An old fleet (stable, long-term residents) → lower per-unit draw.
+This directly explains the Jan 9–10 spikes in the target window.
 
-    1. Count model – predict num_active_containers(t)
-       Features: count_lag24h, count_lag168h, lag_24h (power proxy),
-                 hour, dow, month, is_weekend, is_holiday, temperature_2m
+Because the feature requires container-level timestamps, it is inaccessible
+to any model that starts from hourly aggregates. It is the central
+differentiator of this approach.
 
-    2. Per-unit model – predict mean_power_per_container_kw(t)
-       Features: pu_lag24h, pu_lag168h, temperature_2m,
-                 mean_setpoint_lag24h,
-                 effective_plugin_age_h  (= mean_hours_since_plugin_lag24h + 24)
-                 share_deep_frozen_lag24h,
-                 share_ml2_lag24h, share_ml3_lag24h, share_decos_lag24h,
-                 hour, dow, month
+Pipeline
+--------
+1. Load reefer_release.csv at container-visit level (~840 MB).
+2. Compute hours_since_plugin per row (= EventTime − min(EventTime) for
+   that visit).
+3. Aggregate to hourly: total power_kw, num_containers, mean_setpoint,
+   hardware-type shares (ML2/ML3/Decos), setpoint bucket shares, and
+   mean_hours_since_plugin.
+4. Feature engineering: all reefer-derived features are shifted 24 h
+   (lag24h) so no information from the target hour is used — strictly
+   24-h-ahead compliant. effective_plugin_age_h = lag24h value + 24 h
+   approximates the fleet age at the target hour.
+5. Merge external weather (temperature_2m, no lag needed — weather
+   forecasts are available before the target hour).
+6. Train on winter months only {11, 12, 1} to match the Jan target regime.
 
-    effective_plugin_age_h:
-        At prediction time t, a container that had average age X hours at
-        t-24 h now has age X+24 h (assuming same containers are still
-        connected).  This approximation is valid for visit durations >> 24 h.
+Sub-models (both LightGBM, MAE objective, 600 rounds)
+------------------------------------------------------
+Count model — predicts num_active_containers(t):
+    count_lag24h, count_lag168h, lag_24h (total power proxy),
+    hour, dow, month, is_weekend, is_holiday, temperature_2m
+
+Per-unit model — predicts mean_power_per_container_kw(t):
+    pu_lag24h, pu_lag168h, temperature_2m,
+    mean_setpoint_lag24h,
+    effective_plugin_age_h  (= mean_hours_since_plugin_lag24h + 24),
+    share_deep_frozen_lag24h,
+    share_ml2_lag24h, share_ml3_lag24h, share_decos_lag24h,
+    hour, dow, month
 
 Point forecast:
     pred_power_kw = clip(pred_count, 0) × clip(pred_per_unit, 0)
 
-P90:
-    rf_richfeat.csv (pinball = 9.38, best in pool).
+P90
+---
+Computed inline from training residuals: both sub-models predict on the
+training set, total-power residuals (actual − predicted) are computed on
+the intersection of training rows, and the 90th percentile of those
+residuals is added as a constant spread over the point forecast.
+This is self-contained — no external CSV is required.
 
-Training:
-    Winter months only {11, 12, 1} — same regime as the target window.
-
-Run:
-    uv run python lightgbm/physical_decomp.py
+Run
+---
+    uv run python alternative_baselines/physical_decomp.py
 """
 
 from __future__ import annotations
@@ -55,13 +90,18 @@ import numpy as np
 import pandas as pd
 
 _HERE = Path(__file__).resolve().parent
+_ROOT = _HERE.parent
+_LIGHTGBM = _ROOT / "lightgbm"
+
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
+if str(_LIGHTGBM) not in sys.path:
+    sys.path.insert(0, str(_LIGHTGBM))
 
-# Import weather before baseline (baseline removes local dir from sys.path)
 from weather_external import load_cth_weather  # noqa: E402
 
 from baseline import (  # noqa: E402
+    OUTPUT_SUFFIX,
     PROJECT_ROOT,
     REEFER_CSV,
     SUBMISSIONS_DIR,
@@ -73,8 +113,7 @@ from baseline import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-PHYS_OUT = SUBMISSIONS_DIR / "physical_decomp.csv"
-P90_SOURCE = SUBMISSIONS_DIR / "rf_richfeat.csv"
+PHYS_OUT = SUBMISSIONS_DIR / f"physical_decomp{OUTPUT_SUFFIX}.csv"
 
 SEASONAL_MONTHS: frozenset[int] = frozenset({11, 12, 1})
 
@@ -387,35 +426,21 @@ def main() -> None:
     )
 
     # ------------------------------------------------------------------
-    # 6. P90
+    # 6. P90 — 90th-pct of in-sample total-power residuals
     # ------------------------------------------------------------------
-    if P90_SOURCE.exists():
-        p90_df = pd.read_csv(P90_SOURCE)
-        p90_df["ts"] = pd.to_datetime(p90_df["timestamp_utc"], utc=True)
-        merged_p90 = targets[["ts"]].merge(
-            p90_df[["ts", "pred_p90_kw"]], on="ts", how="left"
-        )
-        pred_p90 = np.maximum(merged_p90["pred_p90_kw"].fillna(0.0).values, pred_point)
-        print(f"[phys] P90 aus {P90_SOURCE.name} (pinball=9.38)")
+    in_sample_count = m_count.predict(train_count[COUNT_FEATURES])
+    in_sample_pu = m_pu.predict(train_pu[PER_UNIT_FEATURES])
+    common = train_count.index.intersection(train_pu.index)
+    if len(common):
+        pred_total = np.clip(
+            in_sample_count[train_count.index.get_indexer(common)], 0, None
+        ) * np.clip(in_sample_pu[train_pu.index.get_indexer(common)], 0, None)
+        resid = train_count.loc[common, TARGET_COL].values - pred_total
+        spread = max(float(np.quantile(resid, 0.9)), 0.0)
     else:
-        # Fallback: 90th-pct of in-sample total-power residuals
-        in_sample_count = m_count.predict(train_count[COUNT_FEATURES])
-        in_sample_pu = m_pu.predict(train_pu[PER_UNIT_FEATURES])
-        # Align on common index (train_count and train_pu may differ)
-        common = train_count.index.intersection(train_pu.index)
-        if len(common):
-            pred_total = np.clip(
-                in_sample_count[train_count.index.get_indexer(common)], 0, None
-            ) * np.clip(in_sample_pu[train_pu.index.get_indexer(common)], 0, None)
-            resid = train_count.loc[common, TARGET_COL].values - pred_total
-            spread = max(float(np.quantile(resid, 0.9)), 0.0)
-        else:
-            spread = 50.0  # safe default
-        pred_p90 = np.maximum(pred_point + spread, pred_point)
-        print(
-            f"[phys] WARN: {P90_SOURCE.name} fehlt, "
-            f"nutze Residual-Offset P90 (spread={spread:.1f} kW)"
-        )
+        spread = 50.0  # safe default
+    pred_p90 = pred_point + spread
+    print(f"[phys] P90 Residual-Spread (90th-pct): {spread:.1f} kW")
 
     # ------------------------------------------------------------------
     # 7. Write submission
