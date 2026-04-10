@@ -76,56 +76,8 @@
   --dur-base:  220ms;
   --dur-slow:  400ms;
 
-  /* ── Legacy token aliases ────────────────────────────────────────────────
-     Kept temporarily so existing components (Dashboard.tsx, LocationsOverview.tsx,
-     KpiCard.tsx, etc.) keep rendering during the Phase 4→9 migration. These
-     aliases will be removed after all components are refactored to use the
-     new semantic tokens above.
-     ─────────────────────────────────────────────────────────────────────── */
-  --bg-white:        var(--bg-card);
-  --border-default:  var(--rule-soft);
-  --border-subtle:   var(--rule-soft);
-  --text-primary:    var(--ink-primary);
-  --text-secondary:  var(--ink-secondary);
-  --text-muted:      var(--ink-muted);
-  --text-nav:        var(--eg-navy);
-  --font-display:    var(--font-sans);
-  --positive:        var(--success);
-  --positive-bg:     rgba(39, 174, 96, 0.08);
-  --negative:        var(--danger);
-  --negative-bg:     var(--danger-soft);
-  --eg-blue:         var(--accent-primary);
-  --eg-blue-light:   #3498DB;
-  --eg-red:          var(--danger);
-  --eg-red-warm:     #E74C3C;
-  --chart-forecast:  var(--accent-primary);
-  --chart-p90-fill:  var(--danger-soft);
-  --chart-p90-stroke: rgba(192, 57, 43, 0.4);
-  --chart-history:   var(--neutral);
-  --chart-grid:      var(--rule-soft);
-  --radius-md:       var(--r-panel);
-}
-
-/* Legacy dark scope for the old LocationsOverview — will be removed entirely
-   when Phase 7 (Split-Screen Landing) rewrites the page. */
-.terminals-dark {
-  --td-surface:                  var(--eg-navy);
-  --td-surface-dim:              #080016;
-  --td-surface-container:        var(--eg-navy-raised);
-  --td-surface-container-low:    #100524;
-  --td-surface-container-high:   #1a0f30;
-  --td-surface-container-highest: #241938;
-  --td-on-surface:               var(--ink-inverse);
-  --td-on-surface-variant:       var(--ink-muted);
-  --td-primary:                  var(--accent-primary);
-  --td-secondary:                var(--warning);
-  --td-outline:                  var(--ink-muted);
-  --td-outline-variant:          rgba(244, 247, 246, 0.12);
-}
-
-.industrial-grid {
-  background-image: radial-gradient(circle, rgba(11, 2, 34, 0.04) 1px, transparent 1px);
-  background-size: 40px 40px;
+  /* shadcn/ui button helpers need a --radius-md hook */
+  --radius-md: var(--r-panel);
 }
 
 /* ============================================================================
