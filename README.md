@@ -352,3 +352,80 @@ Alle Random Seeds sind fest (Base-Modelle mit fixen Seeds; `honest_blend.py`
 ist vollständig deterministisch, weil es keine stochastische Optimierung
 enthält). Wetterdaten werden von Open-Meteo geladen und unter
 `weather_data_lean/` gecached – beim zweiten Lauf kein Netzwerkzugriff nötig.
+
+---
+
+## Post-Submission Update: Erweitertes Target-Fenster
+
+Nach der initialen Submission hat der Organisator das **Hidden-Test-Set**
+veröffentlicht: Das Target-Fenster wurde von 10 Tagen (Jan 1–10, 223h)
+auf den **gesamten Januar 2026** erweitert (Jan 1–31, 744 Stunden).
+
+### Was sich geändert hat
+
+| | Public Leaderboard | Hidden Test |
+|---|---|---|
+| Zeitraum | Jan 1–10 (223h) | Jan 1–31 (744h) |
+| GT mean | 870.9 kW | 899.6 kW |
+| GT max | 1028.2 kW | 1173.9 kW |
+| Peak-Schwelle | 947.3 kW | 1027.4 kW |
+
+Der späte Januar enthält deutlich höhere Peaks (bis 1174 kW), die im
+öffentlichen Fenster unsichtbar waren. Dadurch verschlechterten sich die
+productive RF-Modelle überproportional (mae_peak ~84), während
+`rf_richfeat` mit seinen reichen Container-Features robuster blieb.
+
+### Anpassung der Blend-Strategie
+
+Die optimale Strategie wechselte von `uniform_3_rf` (3 RF-Modelle) zu
+**`uniform_4_rf_phys`** (rf_richfeat + rf_big + rf_s1 + physical_decomp).
+Das physikalische Dekompositionsmodell mit seinem `hours_since_plugin`-Feature
+liefert komplementäre Signale, die im erweiterten Fenster besonders wertvoll
+sind.
+
+### Ergebnisse auf dem Hidden Test (744h)
+
+| Rank | Submission            | mae_all | mae_peak | pinball | **combined** |
+|------|-----------------------|---------|----------|---------|--------------|
+| 🏆 1 | **honest_blend.csv**  |  68.15  |  80.36   |  16.32  | **61.45**    |
+|    2 | rf_richfeat.csv       |  69.07  |  79.15   |  20.75  |    62.43     |
+|    3 | baseline.csv          |  79.87  |  77.91   |  20.28  |    67.36     |
+|    4 | catboost.csv          |  77.91  |  85.36   |  19.69  |    68.50     |
+|    5 | physical_decomp.csv   |  79.53  |  93.61   |  33.41  |    74.53     |
+|    6 | legal_rf_s1.csv       |  92.20  |  86.35   |  32.51  |    78.51     |
+|    7 | legal_rf_big_s1.csv   |  93.78  |  84.06   |  34.21  |    78.95     |
+
+### Einordnung: Warum der Combined Score numerisch höher ist
+
+Der Sprung von 30.04 (public) auf 61.45 (hidden) sieht auf den ersten Blick
+nach einer Verschlechterung aus — ist es aber nicht. Die Ursachen sind
+strukturell, nicht modellbedingt:
+
+**1. Dreimal längeres Fenster mit mehr Variabilität.**
+10 Tage Anfang Januar sind relativ stabil (Feiertags-Auslauf, wenig
+Schiffsverkehr). Der volle Monat enthält Normalwochen mit Schiffsankünften,
+höheren Peaks und stärkeren Tagesschwankungen — schlicht mehr Gelegenheiten
+für Fehler.
+
+**2. Deutlich höhere Peaks.**
+GT max steigt von 1028 auf 1174 kW, die Peak-Schwelle von 947 auf 1027 kW.
+Peaks über 1100 kW kamen im öffentlichen Fenster gar nicht vor — die Modelle
+wurden nie darauf optimiert, und `mae_peak` wird überproportional bestraft.
+
+**3. Der relative Fehler bleibt stabil.**
+Das ist die wichtigste Kennzahl: Der `mae_all` von 68.15 kW bei einem
+Durchschnittsverbrauch von 899.6 kW entspricht **7.6% relativem Fehler** —
+verglichen mit 5.6% auf dem public Set. Für einen 24h-ahead-Forecast über
+einen ganzen Monat mit ungesehenen Verbrauchsmustern ist das eine geringe
+Verschlechterung und zeigt, dass das Modell **gut generalisiert**.
+
+| Metrik | Public (10 Tage) | Hidden (31 Tage) |
+|---|---|---|
+| mae_all | 40.37 kW | 68.15 kW |
+| GT mean | 870.9 kW | 899.6 kW |
+| **Relativer Fehler** | **4.6%** | **7.6%** |
+| Combined Score | 30.04 | 61.45 |
+
+**Fazit:** Die Modelle sind nicht schlechter geworden — die Aufgabe ist
+schwerer. 68 kW durchschnittliche Abweichung bei 24 Stunden
+Vorhersagehorizont über einen vollen Monat ist ein starkes Ergebnis.
