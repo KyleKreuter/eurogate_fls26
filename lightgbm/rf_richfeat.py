@@ -680,7 +680,7 @@ def main() -> None:
     # die starken Peak-Anstiege am 9./10.1. 80/20 gab in unseren
     # Blend-Experimenten (0.5/0.7/0.8/0.9) den niedrigsten combined
     # Score. mae_all ist dort 56 und mae_peak 24 - beides unter baseline.
-    blend_w = 0.8
+    blend_w = 0.7
     pred_point = blend_w * pred_level + (1.0 - blend_w) * pred_resid_level
     print(
         f"[blend] level_mean={pred_level.mean():.1f}, "
