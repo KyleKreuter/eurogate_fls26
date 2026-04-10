@@ -1,193 +1,584 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/raleway";
+@import "@fontsource-variable/outfit";
 @import "@fontsource-variable/jetbrains-mono";
 
-@custom-variant dark (&:is(.dark *));
+/* ============================================================================
+   Eurogate FLS26 — Design tokens
+   1:1 port of the Python dashboard (backend/legacy/styles.css) visual language.
+   Single light theme across the entire app (Landing + Dashboard).
+   ============================================================================ */
 
 :root {
-  /* ─── Eurogate Brand ─── */
-  --eg-blue: #004494;
-  --eg-blue-light: #1a6fd4;
-  --eg-red: #e2001a;
-  --eg-red-warm: #ff4e3a;
-  --eg-navy: #14003d;
+  /* ── Brand ─────────────────────────────────────────────────────────────── */
+  --eg-navy:        #0b0222;           /* headers, rank-bar, tab active, primary titles */
+  --eg-navy-raised: #140a2a;           /* barely-lifted surface when needed */
+  --eg-navy-soft:   rgba(11, 2, 34, 0.08);
 
-  /* ─── Page Background ─── */
-  --bg-page: #f5f5f7;
-  --bg-white: #ffffff;
-  --bg-subtle: #ececec;
+  /* ── Accent ────────────────────────────────────────────────────────────── */
+  --accent-primary:        #2980B9;    /* chart forecast, links, CTA, active states */
+  --accent-primary-hover:  #2471A3;
+  --accent-primary-soft:   rgba(41, 128, 185, 0.08);
+  --accent-primary-strong: rgba(41, 128, 185, 0.18);
 
-  /* ─── Semantic ─── */
-  --positive: #059669;
-  --positive-bg: rgba(5, 150, 105, 0.08);
-  --negative: #dc2626;
-  --negative-bg: rgba(220, 38, 38, 0.07);
+  /* ── Semantic ──────────────────────────────────────────────────────────── */
+  --danger:      #C0392B;               /* P90, warnings, errors */
+  --danger-soft: rgba(192, 57, 43, 0.08);
+  --success:     #27AE60;               /* positive delta, calendar high */
+  --warning:     #E67E22;               /* Hamburg marker beacon, setpoint warm */
+  --neutral:     #95A5A6;               /* history line, muted number */
 
-  /* ─── Text ─── */
-  --text-primary: #222222;
-  --text-secondary: #555566;
-  --text-muted: #888899;
-  --text-nav: #14003d;
+  /* ── Surface (light, single theme) ────────────────────────────────────── */
+  --bg-page:   #F4F7F6;
+  --bg-card:   #FFFFFF;
+  --bg-subtle: #F1F5F9;                 /* toggle track, table hover */
+  --bg-soft:   #F8FAFC;                 /* row hover, sticky thead bg */
 
-  /* ─── Borders ─── */
-  --border-default: #dadada;
-  --border-subtle: #ececec;
+  /* ── Ink ───────────────────────────────────────────────────────────────── */
+  --ink-primary:   #2C3E50;
+  --ink-secondary: #7F8C8D;
+  --ink-muted:     #95A5A6;
+  --ink-inverse:   #F4F7F6;             /* text on dark surfaces */
 
-  /* ─── Chart — Eurogate colors ─── */
-  --chart-forecast: #004494;
-  --chart-p90-fill: rgba(226, 0, 26, 0.08);
-  --chart-p90-stroke: rgba(226, 0, 26, 0.4);
-  --chart-history: #222222;
-  --chart-grid: rgba(0, 0, 0, 0.06);
+  /* ── Lines ─────────────────────────────────────────────────────────────── */
+  --rule-soft:   #E2E8F0;
+  --rule-strong: #CBD5E1;
 
-  /* ─── Typography ─── */
-  --font-display: "Raleway Variable", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  /* ── Data palette (ordinal, 8 steps) ──────────────────────────────────── */
+  --data-0: #2980B9;  --data-1: #27AE60;  --data-2: #8E44AD;  --data-3: #E67E22;
+  --data-4: #E74C3C;  --data-5: #1ABC9C;  --data-6: #F39C12;  --data-7: #D35400;
+
+  /* ── Heatmap ramp (4-bucket quantile) ─────────────────────────────────── */
+  --heat-empty: #F1F5F9;
+  --heat-low:   #D6EAF8;
+  --heat-mid:   #5DADE2;
+  --heat-high:  #1A5490;
+
+  /* ── Typography ────────────────────────────────────────────────────────── */
+  --font-sans: "Outfit Variable", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ── Radius ────────────────────────────────────────────────────────────── */
+  --r-panel: 8px;                       /* glass-panel, kpi-card, table */
+  --r-pill:  6px;                       /* toggle-group container */
+  --r-btn:   4px;                       /* button inside toggle-group */
+  --r-chip:  999px;
+
+  /* ── Shadow (stacked-paper feel) ──────────────────────────────────────── */
+  --shadow-panel:  0 4px 12px rgba(11, 2, 34, 0.03);
+  --shadow-raised: 0 8px 24px rgba(11, 2, 34, 0.06);
+  --shadow-header: 0 2px 8px  rgba(11, 2, 34, 0.05);
+
+  /* ── Motion ────────────────────────────────────────────────────────────── */
+  --ease-out:  cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-snap: cubic-bezier(0.34, 1.26, 0.64, 1);
+  --dur-fast:  120ms;
+  --dur-base:  220ms;
+  --dur-slow:  400ms;
+
+  /* ── Legacy token aliases ────────────────────────────────────────────────
+     Kept temporarily so existing components (Dashboard.tsx, LocationsOverview.tsx,
+     KpiCard.tsx, etc.) keep rendering during the Phase 4→9 migration. These
+     aliases will be removed after all components are refactored to use the
+     new semantic tokens above.
+     ─────────────────────────────────────────────────────────────────────── */
+  --bg-white:        var(--bg-card);
+  --border-default:  var(--rule-soft);
+  --border-subtle:   var(--rule-soft);
+  --text-primary:    var(--ink-primary);
+  --text-secondary:  var(--ink-secondary);
+  --text-muted:      var(--ink-muted);
+  --text-nav:        var(--eg-navy);
+  --font-display:    var(--font-sans);
+  --positive:        var(--success);
+  --positive-bg:     rgba(39, 174, 96, 0.08);
+  --negative:        var(--danger);
+  --negative-bg:     var(--danger-soft);
+  --eg-blue:         var(--accent-primary);
+  --eg-blue-light:   #3498DB;
+  --eg-red:          var(--danger);
+  --eg-red-warm:     #E74C3C;
+  --chart-forecast:  var(--accent-primary);
+  --chart-p90-fill:  var(--danger-soft);
+  --chart-p90-stroke: rgba(192, 57, 43, 0.4);
+  --chart-history:   var(--neutral);
+  --chart-grid:      var(--rule-soft);
+  --radius-md:       var(--r-panel);
 }
 
+/* Legacy dark scope for the old LocationsOverview — will be removed entirely
+   when Phase 7 (Split-Screen Landing) rewrites the page. */
+.terminals-dark {
+  --td-surface:                  var(--eg-navy);
+  --td-surface-dim:              #080016;
+  --td-surface-container:        var(--eg-navy-raised);
+  --td-surface-container-low:    #100524;
+  --td-surface-container-high:   #1a0f30;
+  --td-surface-container-highest: #241938;
+  --td-on-surface:               var(--ink-inverse);
+  --td-on-surface-variant:       var(--ink-muted);
+  --td-primary:                  var(--accent-primary);
+  --td-secondary:                var(--warning);
+  --td-outline:                  var(--ink-muted);
+  --td-outline-variant:          rgba(244, 247, 246, 0.12);
+}
+
+.industrial-grid {
+  background-image: radial-gradient(circle, rgba(11, 2, 34, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ============================================================================
+   Base reset + body
+   ============================================================================ */
+
 @layer base {
-  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
   html {
     background: var(--bg-page);
-    color: var(--text-primary);
-    font-family: var(--font-display);
+    color: var(--ink-primary);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
-  body { min-height: 100vh; overflow-x: hidden; }
+  body {
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
 
-  #root { position: relative; z-index: 1; }
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Outfit defaults to tabular figures off; leave prose alone but ensure
+     numbers in headings feel data-y. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    color: var(--ink-primary);
+  }
+
+  button {
+    font-family: inherit;
+  }
 }
 
-/* ─── Card Panel ─── */
+/* ============================================================================
+   Monospace helper — every number, timestamp, UUID, KPI value
+   ============================================================================ */
 
-.glass-panel,
-.card-panel {
-  background: var(--bg-white);
-  border: 1px solid var(--border-default);
-  border-radius: 16px;
+.mono,
+[data-variant="mono"] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "ss01", "zero";
+}
+
+/* ============================================================================
+   Glass panel — the canonical card wrapper
+   ============================================================================ */
+
+.glass-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-panel);
+  padding: 2.5rem;
+  box-shadow: var(--shadow-panel);
   position: relative;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 2px 12px rgba(0, 0, 0, 0.04);
 }
 
-/* ─── KPI Card ─── */
+.glass-panel--flush {
+  padding: 0;
+}
 
-.kpi-card {
+.glass-panel--tight {
+  padding: 1.5rem;
+}
+
+/* ============================================================================
+   Page header — h1 + uppercase subtitle + 3px rank-bar signature
+   ============================================================================ */
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header__h1 {
+  font: 600 2.2rem/1.15 var(--font-sans);
+  letter-spacing: -0.02em;
+  color: var(--ink-primary);
+}
+
+.page-header__subtitle {
+  margin-top: 0.35rem;
+  font: 500 0.95rem/1.2 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-primary);
+}
+
+.rank-bar {
+  display: block;
+  width: 48px;
+  height: 3px;
+  background: var(--eg-navy);
+  margin: 0.8rem 0 0;
+}
+
+/* ============================================================================
+   Primary tabs — underline with ease-snap slide
+   ============================================================================ */
+
+.primary-tabs {
+  display: flex;
+  gap: 2rem;
+  border-bottom: 1px solid var(--rule-soft);
+  margin-bottom: 2.5rem;
+}
+
+.tab-nav-btn {
   position: relative;
-  border-radius: 16px;
-  padding: 22px 24px;
-  overflow: hidden;
-  cursor: default;
-  transition: box-shadow 200ms ease;
-  background: var(--bg-white);
-  border: 1px solid var(--border-default);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  padding: 1.2rem 0.25rem;
+  background: transparent;
+  border: 0;
+  font: 600 0.92rem/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: color var(--dur-base) var(--ease-out);
 }
 
-.kpi-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
-}
-
-/* Colored left accent bar */
-.kpi-card::before {
+.tab-nav-btn::after {
   content: "";
   position: absolute;
-  top: 14px; bottom: 14px; left: 0;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--kpi-accent);
+  inset: auto 0 -1px 0;
+  height: 3px;
+  background: var(--eg-navy);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--dur-base) var(--ease-snap);
 }
 
-/* ─── Glow Divider ─── */
-
-.glow-divider {
-  height: 1px;
-  background: var(--border-default);
+.tab-nav-btn:hover,
+.tab-nav-btn[data-active="true"] {
+  color: var(--eg-navy);
 }
 
-/* ─── Day Pill ─── */
+.tab-nav-btn[data-active="true"]::after {
+  transform: scaleX(1);
+}
 
-.day-pill {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.02em;
-  padding: 7px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--border-default);
-  background: var(--bg-white);
-  color: var(--text-secondary);
+/* ============================================================================
+   Toggle group — segmented control (24h/14d, Hourly/Daily)
+   ============================================================================ */
+
+.toggle-group {
+  display: inline-flex;
+  background: var(--bg-subtle);
+  padding: 0.25rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--rule-soft);
+  gap: 0;
+}
+
+.toggle-btn {
+  padding: 0.55rem 1.1rem;
+  background: transparent;
+  border: 1px solid transparent;
+  font: 600 0.78rem/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-secondary);
+  border-radius: var(--r-btn);
   cursor: pointer;
-  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+  transition: color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+}
+
+.toggle-btn:hover {
+  color: var(--eg-navy);
+}
+
+.toggle-btn[data-active="true"] {
+  background: var(--bg-card);
+  color: var(--accent-primary);
+  border-color: var(--rule-soft);
+  box-shadow: 0 1px 2px rgba(11, 2, 34, 0.05);
+}
+
+/* ============================================================================
+   Stat pill — label + value chip (Container Inspector stats banner)
+   ============================================================================ */
+
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.9rem 1.2rem;
+  min-width: 140px;
+  background: var(--bg-page);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-panel);
+}
+
+.stat-pill__label {
+  font: 600 0.72rem/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-secondary);
+}
+
+.stat-pill__value {
+  font: 600 1.15rem/1 var(--font-mono);
+  color: var(--ink-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-pill--highlight {
+  background: var(--accent-primary-soft);
+  border-color: var(--accent-primary);
+}
+
+.stat-pill--highlight .stat-pill__value {
+  color: var(--accent-primary);
+}
+
+/* ============================================================================
+   Premium table — dense data table (Container Inspector)
+   ============================================================================ */
+
+.premium-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.premium-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-soft);
+}
+
+.premium-table th {
+  padding: 1rem 1rem;
+  font: 600 0.72rem/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-secondary);
+  text-align: left;
+  border-bottom: 2px solid var(--rule-soft);
+  white-space: nowrap;
+}
+
+.premium-table th[data-sortable="true"] {
+  cursor: pointer;
   user-select: none;
 }
 
-.day-pill:hover {
-  border-color: var(--eg-navy);
-  color: var(--text-primary);
+.premium-table th[data-sortable="true"]:hover {
+  color: var(--eg-navy);
 }
 
-.day-pill[data-active="true"] {
-  background: var(--eg-navy);
-  border-color: var(--eg-navy);
-  color: #ffffff;
-  font-weight: 600;
+.premium-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--rule-soft);
+  font: 400 0.88rem/1.3 var(--font-sans);
+  color: var(--ink-primary);
 }
 
-/* ─── Data mono type ─── */
-
-.data-value {
+.premium-table td.mono,
+.premium-table td[data-variant="mono"] {
   font-family: var(--font-mono);
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
 }
 
-/* ─── Focus states ─── */
+.premium-table tbody tr {
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.premium-table tbody tr:hover {
+  background: var(--bg-soft);
+}
+
+.premium-table tbody tr[data-selected="true"] {
+  background: var(--accent-primary-soft);
+  box-shadow: inset 3px 0 0 0 var(--accent-primary);
+}
+
+.premium-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ============================================================================
+   KPI card — Apple-style (large lucide icon, no accent bar)
+   ============================================================================ */
+
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-panel);
+  padding: 1.75rem 1.5rem;
+  box-shadow: var(--shadow-panel);
+  transition: box-shadow var(--dur-base) var(--ease-out),
+              transform var(--dur-base) var(--ease-out);
+}
+
+.kpi-card:hover {
+  box-shadow: var(--shadow-raised);
+}
+
+.kpi-card__icon {
+  display: inline-flex;
+  color: var(--accent-primary);
+  margin-bottom: 0.9rem;
+}
+
+.kpi-card__label {
+  font: 600 0.72rem/1.2 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-secondary);
+  margin-bottom: 0.55rem;
+}
+
+.kpi-card__value {
+  font: 600 2.4rem/1 var(--font-mono);
+  color: var(--ink-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.kpi-card__unit {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--ink-secondary);
+  margin-left: 0.35rem;
+  letter-spacing: 0;
+}
+
+.kpi-card__delta {
+  margin-top: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: 500 0.82rem/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-card__delta--pos { color: var(--success); }
+.kpi-card__delta--neg { color: var(--danger); }
+
+/* ============================================================================
+   App navbar — sticky white, 80px
+   ============================================================================ */
+
+.app-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--rule-soft);
+  box-shadow: var(--shadow-header);
+  padding: 1.1rem 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 80px;
+}
+
+/* ============================================================================
+   Focus — keyboard-only accent ring
+   ============================================================================ */
 
 :focus:not(:focus-visible) {
   outline: none;
 }
 
 :focus-visible {
-  outline: 2px solid var(--eg-blue);
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
+  border-radius: 2px;
 }
 
-/* ─── Recharts ─── */
+/* ============================================================================
+   Scrollbar — thin neutral
+   ============================================================================ */
 
-.recharts-cartesian-grid line { stroke: var(--chart-grid) !important; }
-.recharts-text { font-family: var(--font-mono) !important; font-size: 10px !important; fill: var(--text-muted) !important; }
-.recharts-tooltip-wrapper { outline: none !important; }
-
-/* ─── Scrollbar ─── */
-::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #c0bdd0; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
 
-/* ─── Terminals Dark Theme (scoped) ─── */
+/* ============================================================================
+   Recharts overrides — consistent theme across all charts
+   ============================================================================ */
 
-.terminals-dark {
-  --td-surface: #131318;
-  --td-surface-dim: #0e0e13;
-  --td-surface-container: #1f1f25;
-  --td-surface-container-low: #1b1b20;
-  --td-surface-container-high: #2a292f;
-  --td-surface-container-highest: #35343a;
-  --td-on-surface: #e4e1e9;
-  --td-on-surface-variant: #cac4d0;
-  --td-primary: #cfbcff;
-  --td-secondary: #ffb4a8;
-  --td-outline: #948f9a;
-  --td-outline-variant: #49454f;
+.recharts-cartesian-grid line {
+  stroke: var(--rule-soft) !important;
+  stroke-dasharray: 2 4 !important;
 }
 
-.industrial-grid {
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line {
+  stroke: var(--rule-soft) !important;
 }
 
-/* ─── Mapbox GL overrides ─── */
+.recharts-text {
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  fill: var(--ink-secondary) !important;
+}
+
+.recharts-legend-item-text {
+  font-family: var(--font-sans) !important;
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-secondary) !important;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+.recharts-default-tooltip {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--eg-navy) !important;
+  border-radius: var(--r-panel) !important;
+  box-shadow: var(--shadow-raised) !important;
+  padding: 0.75rem 1rem !important;
+  font-family: var(--font-mono) !important;
+  font-size: 0.8rem !important;
+}
+
+.recharts-default-tooltip .recharts-tooltip-label {
+  font-family: var(--font-sans) !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--ink-secondary) !important;
+  margin-bottom: 0.35rem !important;
+}
+
+/* ============================================================================
+   Mapbox overrides — hide chrome, silence outline
+   ============================================================================ */
 
 .mapboxgl-ctrl-attrib,
 .mapboxgl-ctrl-logo {
@@ -198,30 +589,57 @@
   outline: none;
 }
 
-/* ─── Terminal marker pulse ─── */
-
+/* Terminal marker pulse (Hamburg beacon) */
 @keyframes markerPulse {
-  0% { transform: scale(1); opacity: 0.6; }
-  100% { transform: scale(2.5); opacity: 0; }
+  0%   { transform: scale(1);   opacity: 0.55; }
+  100% { transform: scale(2.5); opacity: 0;    }
 }
 
 .marker-pulse {
-  animation: markerPulse 1.8s ease-out infinite;
+  animation: markerPulse 1.8s var(--ease-out) infinite;
 }
 
-/* ─── Page enter animation ─── */
+/* ============================================================================
+   Page enter — staggered lift-in for dashboard content
+   ============================================================================ */
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes lift-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
 }
 
-.page-enter {
-  animation: fadeIn 300ms ease-out;
+.page-enter > * {
+  opacity: 0;
+  animation: lift-in var(--dur-slow) var(--ease-out) forwards;
 }
 
-/* ─── Reduced motion ─── */
+.page-enter > *:nth-child(1) { animation-delay: 0ms;   }
+.page-enter > *:nth-child(2) { animation-delay: 80ms;  }
+.page-enter > *:nth-child(3) { animation-delay: 140ms; }
+.page-enter > *:nth-child(4) { animation-delay: 200ms; }
+.page-enter > *:nth-child(5) { animation-delay: 260ms; }
+.page-enter > *:nth-child(6) { animation-delay: 320ms; }
+
+/* ============================================================================
+   Reduced motion — respect OS preference
+   ============================================================================ */
+
 @media (prefers-reduced-motion: reduce) {
-  .kpi-card { transition: none; }
-  .page-enter { animation: none; }
+  .kpi-card,
+  .tab-nav-btn,
+  .toggle-btn,
+  .premium-table tbody tr {
+    transition: none !important;
+  }
+  .tab-nav-btn::after {
+    transition: none !important;
+  }
+  .page-enter > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .marker-pulse {
+    animation: none !important;
+  }
 }
