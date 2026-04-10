@@ -50,7 +50,10 @@ export function HamburgDashboard() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ background: "var(--bg-page)" }}
+    >
       <Navigation backTo="/" centerLabel="Hamburg Dashboard" />
       <main
         className="flex-1 w-full mx-auto px-6 md:px-10 py-10"
