@@ -20,3 +20,12 @@ venv/
 
 # CatBoost training artifacts
 catboost_info/
+
+# Backend — generated SQLite database (regenerate via backend/scripts/build_database.py)
+backend/reefer.db
+backend/reefer.db.zip
+
+# Web — build output and node_modules
+web/dist/
+web/node_modules/
+web/*.log
