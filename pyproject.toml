@@ -12,5 +12,6 @@ dependencies = [
     "pandas>=3.0.2",
     "requests>=2.33.1",
     "scikit-learn>=1.6.0",
+    "statsmodels>=0.14.6",
     "torch>=2.4.0",
 ]
