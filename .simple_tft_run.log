@@ -1,0 +1,17 @@
+[load] Lese reefer_release.csv ...
+[simple-tft] pre-target train rows: 8760 | jan-2026 rows before filter: 0 | removed: 0
+[simple-tft] synth diag quantiles q50/q90/q95/q99 real=[0.06  1.216 1.485 1.955] synth=[0.131 0.988 1.199 1.607]
+[simple-tft] synth diag acf lag1 real=0.994 synth=0.994 | lag24 real=0.866 synth=0.856 | lag168 real=0.645 synth=0.697
+[simple-tft] synth diag peaks rate real=0.050 synth=0.050 | mean_run real=7.82 synth=7.18
+[simple-tft] windows train/valid: 8141/429 | synthetic year hours=8760, synthetic windows=4285
+[simple-tft] epoch 01/10 train=0.21471 valid=0.16909
+[simple-tft] epoch 02/10 train=0.17489 valid=0.16184
+[simple-tft] epoch 03/10 train=0.15710 valid=0.15419
+[simple-tft] epoch 04/10 train=0.14939 valid=0.15043
+[simple-tft] epoch 05/10 train=0.14549 valid=0.14640
+[simple-tft] epoch 06/10 train=0.14295 valid=0.14143
+[simple-tft] epoch 07/10 train=0.13995 valid=0.13806
+[simple-tft] epoch 08/10 train=0.13668 valid=0.13570
+[simple-tft] epoch 09/10 train=0.13254 valid=0.12880
+[simple-tft] epoch 10/10 train=0.12801 valid=0.12509
+[simple-tft] submission written: lightgbm/submissions/simple_tft_transformer_baseline.csv (223 rows)

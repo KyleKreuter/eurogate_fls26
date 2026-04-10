@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eurogate Terminals Map</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Native Leaflet CSS Core -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <link rel="stylesheet" href="map.css">
+    
+    <!-- Native Leaflet JS Engine -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+</head>
+<body>
+    <div class="eurogate-wrapper">
+        <header class="eurogate-header">
+            <!-- Dynamic Eurogate Real Logo -->
+            <img src="https://www1.eurogate.de/wp-content/themes/eurogate/img/logo.svg" alt="Eurogate Logo" class="eurogate-logo">
+            <nav class="map-nav">
+                <span>International Port Forecasting Network</span>
+            </nav>
+        </header>
+
+        <div class="map-container">
+            <div id="eurogate-map"></div>
+        </div>
+    </div>
+    
+    <script src="map.js"></script>
+</body>
+</html>
